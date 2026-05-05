@@ -724,9 +724,31 @@ async function executeModalRun(dryRun) {
 
     progressFill.style.width = "100%";
     progressText.textContent = "Done.";
-    result.textContent = dryRun
-      ? `Dry run: ${outcome.matched} of ${outcome.total} messages would be affected.`
-      : `Matched ${outcome.matched} of ${outcome.total} messages.`;
+    result.innerHTML = "";
+    if (dryRun) {
+      const summary = document.createElement("p");
+      summary.textContent = `Dry run: ${outcome.matched} of ${outcome.total} messages would be affected.`;
+      result.appendChild(summary);
+      if (outcome.hits && outcome.hits.length > 0) {
+        const ul = document.createElement("ul");
+        ul.className = "dry-run-hits";
+        for (const h of outcome.hits) {
+          const li = document.createElement("li");
+          const fromSpan = document.createElement("span");
+          fromSpan.className = "hit-from";
+          fromSpan.textContent = h.from || "(no sender)";
+          const subjSpan = document.createElement("span");
+          subjSpan.className = "hit-subject";
+          subjSpan.textContent = h.subject || "(no subject)";
+          li.appendChild(fromSpan);
+          li.appendChild(subjSpan);
+          ul.appendChild(li);
+        }
+        result.appendChild(ul);
+      }
+    } else {
+      result.textContent = `Matched ${outcome.matched} of ${outcome.total} messages.`;
+    }
     result.classList.remove("hidden");
 
     confirmBtn.textContent = "Close";

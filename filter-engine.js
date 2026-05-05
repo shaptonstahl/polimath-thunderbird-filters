@@ -225,6 +225,7 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false)
 
   let matched = 0;
   const consumed = new Set();
+  const hits = dryRun ? [] : null;
 
   for (const message of allMessages) {
     if (consumed.has(message.id)) continue;
@@ -234,6 +235,7 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false)
       const hit = await runFilter(filter, message, fullMessage, dryRun);
       if (hit) {
         matched++;
+        if (hits) hits.push({ from: message.author || "", subject: message.subject || "" });
         const movesOrDeletes = filter.actions.some(a => a.type === "move" || a.type === "delete");
         if (movesOrDeletes && !dryRun) consumed.add(message.id);
         break; // first-match: stop at the first filter that matches this message
@@ -241,5 +243,5 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false)
     }
   }
 
-  return { matched, total };
+  return { matched, total, hits };
 }

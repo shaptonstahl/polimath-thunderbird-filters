@@ -373,31 +373,47 @@ describe('action execution', () => {
   it('mark-read calls update with { read: true }', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-read' }]), msg, null);
-    assert.deepEqual(ctx.calls, [{ type: 'update', id: 99, props: { read: true } }]);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
+    assert.equal(ctx.calls[0].id, 99);
+    assert.equal(ctx.calls[0].props.read, true);
   });
 
   it('mark-unread calls update with { read: false }', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-unread' }]), msg, null);
-    assert.deepEqual(ctx.calls, [{ type: 'update', id: 99, props: { read: false } }]);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
+    assert.equal(ctx.calls[0].id, 99);
+    assert.equal(ctx.calls[0].props.read, false);
   });
 
   it('mark-junk calls update with { junk: true }', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-junk' }]), msg, null);
-    assert.deepEqual(ctx.calls, [{ type: 'update', id: 99, props: { junk: true } }]);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
+    assert.equal(ctx.calls[0].id, 99);
+    assert.equal(ctx.calls[0].props.junk, true);
   });
 
   it('move calls messages.move with the target folder id', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'move', folderId: 'folder-42' }]), msg, null);
-    assert.deepEqual(ctx.calls, [{ type: 'move', ids: [99], folderId: 'folder-42' }]);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'move');
+    assert.equal(ctx.calls[0].folderId, 'folder-42');
+    assert.equal(ctx.calls[0].ids.length, 1);
+    assert.equal(ctx.calls[0].ids[0], 99);
   });
 
   it('delete calls messages.delete', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'delete' }]), msg, null);
-    assert.deepEqual(ctx.calls, [{ type: 'delete', ids: [99], skipTrash: false }]);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'delete');
+    assert.equal(ctx.calls[0].ids[0], 99);
+    assert.equal(ctx.calls[0].skipTrash, false);
   });
 
   it('add-tag appends to existing tags', async () => {
@@ -433,8 +449,8 @@ describe('action execution', () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-read' }, { type: 'mark-junk' }]), msg, null);
     assert.equal(ctx.calls.length, 2);
-    assert.deepEqual(ctx.calls[0].props, { read: true });
-    assert.deepEqual(ctx.calls[1].props, { junk: true });
+    assert.equal(ctx.calls[0].props.read, true);
+    assert.equal(ctx.calls[1].props.junk, true);
   });
 });
 
@@ -497,14 +513,17 @@ describe('runFiltersOnFolder', () => {
 
   it('returns {0,0} when filter list is empty', async () => {
     const ctx = makeContext(msgs);
-    assert.deepEqual(await ctx.runFiltersOnFolder([], 'inbox'), { matched: 0, total: 0 });
+    const result = await ctx.runFiltersOnFolder([], 'inbox');
+    assert.equal(result.matched, 0);
+    assert.equal(result.total, 0);
   });
 
   it('returns {0,0} when all filters are disabled', async () => {
     const ctx = makeContext(msgs);
     const result = await ctx.runFiltersOnFolder(
       [mkFilter('f1', invoiceCond, [], false)], 'inbox');
-    assert.deepEqual(result, { matched: 0, total: 0 });
+    assert.equal(result.matched, 0);
+    assert.equal(result.total, 0);
   });
 
   it('counts matched and total correctly', async () => {

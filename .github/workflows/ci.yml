@@ -4,17 +4,14 @@ on:
   push:
   pull_request:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   # ── Run tests on every push and every PR ──────────────────────────────────
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -30,7 +27,7 @@ jobs:
       contents: write   # needed to create releases and tags
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Read version from manifest.json
         id: version
@@ -51,7 +48,7 @@ jobs:
       # Always upload the .xpi as a workflow artifact so it is downloadable
       # from the Actions tab regardless of whether a release is created.
       - name: Upload .xpi as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: polimath-filters-${{ steps.version.outputs.version }}
           path: polimath-filters-${{ steps.version.outputs.version }}.xpi

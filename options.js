@@ -296,6 +296,7 @@ function renderAccountsSection() {
 const FIELDS = [
   { value: "subject",    label: "Subject" },
   { value: "from",       label: "From" },
+  { value: "from-name",  label: "From name" },
   { value: "to",         label: "To" },
   { value: "cc",         label: "CC" },
   { value: "bcc",        label: "BCC" },

@@ -28,6 +28,11 @@ function getField(field, message, fullMessage) {
       return message.subject || "";
     case "from":
       return message.author || "";
+    case "from-name": {
+      const author = message.author || "";
+      const m = author.match(/^(.+?)\s*</);
+      return m ? m[1].trim() : "";
+    }
     case "to":
       return (message.recipients || []).join(", ");
     case "cc":

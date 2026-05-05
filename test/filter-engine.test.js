@@ -101,6 +101,22 @@ describe('getField', () => {
   it('subject', () => assert.equal(E.getField('subject', msg, null), 'Hello there'));
   it('from',    () => assert.equal(E.getField('from', msg, null), 'alice@example.com'));
 
+  it('from-name extracts display name from "Name <email>" format', () => {
+    assert.equal(E.getField('from-name', { author: 'Alice Smith <alice@example.com>' }, null), 'Alice Smith');
+  });
+
+  it('from-name returns empty string when author is email-only', () => {
+    assert.equal(E.getField('from-name', { author: 'alice@example.com' }, null), '');
+  });
+
+  it('from-name returns empty string when author is missing', () => {
+    assert.equal(E.getField('from-name', {}, null), '');
+  });
+
+  it('from-name handles quoted display name', () => {
+    assert.equal(E.getField('from-name', { author: '"Bob Jones" <bob@example.com>' }, null), '"Bob Jones"');
+  });
+
   it('to joins multiple recipients with comma-space', () => {
     assert.equal(E.getField('to', msg, null), 'bob@example.com, carol@example.com');
   });
@@ -540,6 +556,24 @@ describe('runFiltersOnFolder', () => {
       [mkFilter('f1', invoiceCond, [{ type: 'mark-read' }])], 'inbox', null, true);
     assert.equal(result.matched, 2);
     assert.equal(ctx.calls.length, 0);
+  });
+
+  it('dry run returns hits array with from and subject for each matched message', async () => {
+    const ctx = makeContext(msgs);
+    const result = await ctx.runFiltersOnFolder(
+      [mkFilter('f1', invoiceCond, [{ type: 'mark-read' }])], 'inbox', null, true);
+    assert.equal(result.hits.length, 2);
+    assert.equal(result.hits[0].from, 'a@biz.com');
+    assert.equal(result.hits[0].subject, 'Invoice Q1');
+    assert.equal(result.hits[1].from, 'c@biz.com');
+    assert.equal(result.hits[1].subject, 'Invoice Q2');
+  });
+
+  it('non-dry-run returns null hits', async () => {
+    const ctx = makeContext(msgs);
+    const result = await ctx.runFiltersOnFolder(
+      [mkFilter('f1', invoiceCond, [{ type: 'mark-read' }])], 'inbox', null, false);
+    assert.equal(result.hits, null);
   });
 
   it('messages consumed by a move are skipped by later filters', async () => {

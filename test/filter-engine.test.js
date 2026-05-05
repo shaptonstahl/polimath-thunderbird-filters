@@ -566,13 +566,13 @@ describe('runFiltersOnFolder', () => {
 
   it('dry run does not consume messages, so later filters see them', async () => {
     const ctx = makeContext(msgs);
-    // In dry-run, f1 "matches" invoices but does not consume them.
-    // f2 also sees all 3 messages and matches all 3.
+    // In dry-run nothing is consumed, but first-match still stops at the first
+    // matching filter per message.  f1 (invoice) matches msgs 1 and 3; f2 (all)
+    // matches msg 2 (the only one f1 did not claim).  Total: 3.
     const f1 = mkFilter('f1', invoiceCond, [{ type: 'move', folderId: 'archive' }]);
     const f2 = mkFilter('f2', allCond,     [{ type: 'mark-read' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
-    // f1: 2 matches; f2: 3 matches (all visible, no consumption)
-    assert.equal(result.matched, 5);
+    assert.equal(result.matched, 3);
     assert.equal(ctx.calls.length, 0);
   });
 

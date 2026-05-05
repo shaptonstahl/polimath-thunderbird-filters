@@ -10,6 +10,7 @@ let editingFilter = null;  // deep copy being edited
 let editingIndex = -1;     // index in allFilters (-1 = new)
 let folderList = [];       // [{id, label}] populated on load
 let tagList = [];          // [{key, tag}] populated on load
+let dragSrcIdx = null;     // index of filter being dragged
 
 // ── Storage helpers ───────────────────────────────────────────────────────
 
@@ -74,6 +75,61 @@ function renderFilterList() {
     const li = document.createElement("li");
     li.className = "filter-item" + (editingIndex === idx ? " active" : "");
     li.dataset.idx = idx;
+    li.draggable = true;
+
+    li.addEventListener("dragstart", e => {
+      dragSrcIdx = idx;
+      e.dataTransfer.effectAllowed = "move";
+      li.classList.add("dragging");
+    });
+
+    li.addEventListener("dragend", () => {
+      dragSrcIdx = null;
+      li.classList.remove("dragging");
+      document.querySelectorAll(".filter-item.drag-over").forEach(el => el.classList.remove("drag-over"));
+    });
+
+    li.addEventListener("dragover", e => {
+      if (dragSrcIdx === null || dragSrcIdx === idx) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".filter-item.drag-over").forEach(el => el.classList.remove("drag-over"));
+      li.classList.add("drag-over");
+    });
+
+    li.addEventListener("dragleave", e => {
+      if (!li.contains(e.relatedTarget)) li.classList.remove("drag-over");
+    });
+
+    li.addEventListener("drop", e => {
+      e.preventDefault();
+      li.classList.remove("drag-over");
+      if (dragSrcIdx === null || dragSrcIdx === idx) return;
+
+      const from = dragSrcIdx;
+      const [moved] = allFilters.splice(from, 1);
+      const to = from < idx ? idx - 1 : idx;
+      allFilters.splice(to, 0, moved);
+
+      if (editingIndex === from) {
+        editingIndex = to;
+      } else if (from < to && editingIndex > from && editingIndex <= to) {
+        editingIndex--;
+      } else if (from > to && editingIndex >= to && editingIndex < from) {
+        editingIndex++;
+      }
+
+      dragSrcIdx = null;
+      saveFilters();
+      renderFilterList();
+    });
+
+    // Drag handle
+    const handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.textContent = "⠿";
+    handle.setAttribute("aria-hidden", "true");
+    handle.addEventListener("click", e => e.stopPropagation());
 
     // Toggle
     const toggle = document.createElement("label");
@@ -128,6 +184,7 @@ function renderFilterList() {
     actions.appendChild(runBtn);
     actions.appendChild(delBtn);
 
+    li.appendChild(handle);
     li.appendChild(toggle);
     li.appendChild(nameSpan);
     li.appendChild(actions);
@@ -177,8 +234,19 @@ function closeEditor() {
   renderFilterList();
 }
 
+function hasLeafCondition(node) {
+  if (node.type === "condition") return true;
+  if (node.type === "not") return hasLeafCondition(node.child);
+  if (node.type === "and" || node.type === "or") return node.children.some(hasLeafCondition);
+  return false;
+}
+
 function saveEditor() {
   editingFilter.name = document.getElementById("filter-name").value.trim() || "Unnamed";
+  if (!hasLeafCondition(editingFilter.condition)) {
+    alert("Add at least one condition before saving.");
+    return;
+  }
   if (editingIndex === -1) {
     allFilters.push(editingFilter);
     editingIndex = allFilters.length - 1;

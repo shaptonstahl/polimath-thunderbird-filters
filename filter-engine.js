@@ -45,6 +45,8 @@ function getField(field, message, fullMessage) {
 
 // ── Operator matching ────────────────────────────────────────────────────────
 
+const _regexCache = new Map();
+
 function applyOperator(operator, fieldValue, conditionValue, caseSensitive) {
   const fv = caseSensitive ? fieldValue : fieldValue.toLowerCase();
   const cv = caseSensitive ? conditionValue : conditionValue.toLowerCase();
@@ -61,12 +63,16 @@ function applyOperator(operator, fieldValue, conditionValue, caseSensitive) {
       return fv.startsWith(cv);
     case "ends-with":
       return fv.endsWith(cv);
-    case "regex":
-      try {
-        return new RegExp(conditionValue, caseSensitive ? "" : "i").test(fieldValue);
-      } catch {
-        return false;
+    case "regex": {
+      const key = conditionValue + "\x00" + caseSensitive;
+      let re = _regexCache.get(key);
+      if (re === undefined) {
+        try { re = new RegExp(conditionValue, caseSensitive ? "" : "i"); }
+        catch { re = null; }
+        _regexCache.set(key, re);
       }
+      return re ? re.test(fieldValue) : false;
+    }
     default:
       return false;
   }
@@ -184,12 +190,12 @@ async function fetchAllMessages(folderId) {
 }
 
 /**
- * Run a set of filters on all messages in a folder using the optimized
- * rule-centric algorithm:
+ * Run a set of filters on all messages in a folder.
+ * Uses message-centric first-match semantics (same as incoming-mail processing):
  *   - Fetch all headers once.
- *   - For each rule, iterate available messages.
- *   - Pre-fetch full content in parallel batches when needed.
- *   - Remove consumed (moved/deleted) messages from subsequent rules.
+ *   - Pre-fetch full content in parallel batches when any filter needs it.
+ *   - For each message, apply filters in order and stop at the first match.
+ *   - Remove consumed (moved/deleted) messages so later messages don't see them.
  *
  * Returns { matched: number, total: number }.
  * When dryRun is true, conditions are evaluated but actions are never executed.
@@ -200,46 +206,38 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false)
 
   const allMessages = await fetchAllMessages(folderId);
   const total = allMessages.length;
-  const available = new Map(allMessages.map(m => [m.id, m]));
   const fullCache = new Map();
 
-  let matched = 0;
-
-  for (const filter of enabledFilters) {
-    const needsFull = conditionNeedsFullMessage(filter.condition);
-    const ids = [...available.keys()];
-
-    if (needsFull) {
-      const uncached = ids.filter(id => !fullCache.has(id));
-      const BATCH = 10;
-      for (let i = 0; i < uncached.length; i += BATCH) {
-        const batch = uncached.slice(i, i + BATCH);
-        const results = await Promise.all(
-          batch.map(id => messenger.messages.getFull(id).catch(() => null))
-        );
-        for (let j = 0; j < batch.length; j++) {
-          if (results[j]) fullCache.set(batch[j], results[j]);
-        }
-        if (onProgress) onProgress({ stage: "fetching", done: i + batch.length, total: uncached.length });
+  const anyNeedsFull = enabledFilters.some(f => conditionNeedsFullMessage(f.condition));
+  if (anyNeedsFull) {
+    const BATCH = 10;
+    for (let i = 0; i < allMessages.length; i += BATCH) {
+      const batch = allMessages.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(m => messenger.messages.getFull(m.id).catch(() => null))
+      );
+      for (let j = 0; j < batch.length; j++) {
+        if (results[j]) fullCache.set(batch[j].id, results[j]);
       }
+      if (onProgress) onProgress({ stage: "fetching", done: Math.min(i + BATCH, total), total });
     }
+  }
 
-    const consumed = [];
-    for (const id of ids) {
-      const message = available.get(id);
-      const fullMessage = needsFull ? (fullCache.get(id) || null) : null;
+  let matched = 0;
+  const consumed = new Set();
+
+  for (const message of allMessages) {
+    if (consumed.has(message.id)) continue;
+    const fullMessage = anyNeedsFull ? (fullCache.get(message.id) || null) : null;
+
+    for (const filter of enabledFilters) {
       const hit = await runFilter(filter, message, fullMessage, dryRun);
       if (hit) {
         matched++;
-        const movesOrDeletes = filter.actions.some(
-          a => a.type === "move" || a.type === "delete"
-        );
-        if (movesOrDeletes && !dryRun) consumed.push(id);
+        const movesOrDeletes = filter.actions.some(a => a.type === "move" || a.type === "delete");
+        if (movesOrDeletes && !dryRun) consumed.add(message.id);
+        break; // first-match: stop at the first filter that matches this message
       }
-    }
-    for (const id of consumed) {
-      available.delete(id);
-      fullCache.delete(id);
     }
   }
 

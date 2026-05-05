@@ -17,11 +17,14 @@ messenger.storage.onChanged.addListener((changes, area) => {
 });
 
 messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => {
+  const accountId = folder.accountId;
+  const activeFilters = cachedFilters.filter(f =>
+    f.enabled && (!f.accountIds?.length || f.accountIds.includes(accountId))
+  );
+
   for (const message of messageList.messages) {
     let fullMessage = null;
-    const needsFull = cachedFilters.some(
-      f => f.enabled && conditionNeedsFullMessage(f.condition)
-    );
+    const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));
     if (needsFull) {
       try {
         fullMessage = await messenger.messages.getFull(message.id);
@@ -30,7 +33,7 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
       }
     }
 
-    for (const filter of cachedFilters) {
+    for (const filter of activeFilters) {
       try {
         const matched = await runFilter(filter, message, fullMessage);
         if (matched) break; // first-match semantics for incoming mail

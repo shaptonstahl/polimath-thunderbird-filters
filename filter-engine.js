@@ -197,12 +197,17 @@ async function fetchAllMessages(folderId) {
  *   - For each message, apply filters in order and stop at the first match.
  *   - Remove consumed (moved/deleted) messages so later messages don't see them.
  *
- * Returns { matched: number, total: number }.
+ * Returns { matched: number, total: number, hits: array|null }.
  * When dryRun is true, conditions are evaluated but actions are never executed.
+ * accountId, when provided, skips filters not scoped to that account.
  */
-async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false) {
-  const enabledFilters = filters.filter(f => f.enabled);
-  if (enabledFilters.length === 0) return { matched: 0, total: 0 };
+async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null) {
+  const enabledFilters = filters.filter(f => {
+    if (!f.enabled) return false;
+    if (accountId && f.accountIds?.length && !f.accountIds.includes(accountId)) return false;
+    return true;
+  });
+  if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: dryRun ? [] : null };
 
   const allMessages = await fetchAllMessages(folderId);
   const total = allMessages.length;

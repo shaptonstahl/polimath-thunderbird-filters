@@ -8,7 +8,8 @@
 let allFilters = [];   // persisted filters
 let editingFilter = null;  // deep copy being edited
 let editingIndex = -1;     // index in allFilters (-1 = new)
-let folderList = [];       // [{id, label}] populated on load
+let folderList = [];       // [{id, label, accountId}] populated on load
+let accountList = [];      // [{id, name}] populated on load
 let tagList = [];          // [{key, tag}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
 
@@ -27,9 +28,11 @@ async function saveFilters() {
 
 async function buildFolderList() {
   folderList = [];
+  accountList = [];
   const accounts = await messenger.accounts.list(true);
   for (const account of accounts) {
-    collectFolders(account.folders || [], account.name, folderList);
+    accountList.push({ id: account.id, name: account.name });
+    collectFolders(account.folders || [], account.name, account.id, folderList);
   }
 }
 
@@ -42,12 +45,12 @@ async function loadTagList() {
   }
 }
 
-function collectFolders(folders, prefix, out) {
+function collectFolders(folders, prefix, accountId, out) {
   for (const folder of folders) {
     const label = prefix ? `${prefix} / ${folder.name}` : folder.name;
-    out.push({ id: folder.id, label });
+    out.push({ id: folder.id, label, accountId });
     if (folder.subFolders && folder.subFolders.length) {
-      collectFolders(folder.subFolders, label, out);
+      collectFolders(folder.subFolders, label, accountId, out);
     }
   }
 }
@@ -203,6 +206,7 @@ function openEditor(idx) {
   document.getElementById("filter-name").value = editingFilter.name || "";
   document.getElementById("editor-panel").classList.remove("hidden");
   document.getElementById("editor-placeholder").classList.add("hidden");
+  renderAccountsSection();
   renderConditionTree();
   renderActionsList();
   renderFilterList();
@@ -214,6 +218,7 @@ function openNewEditor() {
     id: crypto.randomUUID(),
     name: "",
     enabled: true,
+    accountIds: [],
     condition: { type: "and", children: [] },
     actions: []
   };
@@ -221,6 +226,7 @@ function openNewEditor() {
   document.getElementById("filter-name").value = "";
   document.getElementById("editor-panel").classList.remove("hidden");
   document.getElementById("editor-placeholder").classList.add("hidden");
+  renderAccountsSection();
   renderConditionTree();
   renderActionsList();
   renderFilterList();
@@ -256,6 +262,33 @@ function saveEditor() {
   saveFilters();
   renderFilterList();
   document.getElementById("editor-title").textContent = "Edit Filter";
+}
+
+// ── Account scope rendering ───────────────────────────────────────────────
+
+function renderAccountsSection() {
+  const container = document.getElementById("accounts-list");
+  container.innerHTML = "";
+  for (const account of accountList) {
+    const label = document.createElement("label");
+    label.className = "account-checkbox";
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = (editingFilter.accountIds || []).includes(account.id);
+    chk.addEventListener("change", () => {
+      if (!editingFilter.accountIds) editingFilter.accountIds = [];
+      if (chk.checked) {
+        if (!editingFilter.accountIds.includes(account.id)) {
+          editingFilter.accountIds.push(account.id);
+        }
+      } else {
+        editingFilter.accountIds = editingFilter.accountIds.filter(id => id !== account.id);
+      }
+    });
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode(" " + account.name));
+    container.appendChild(label);
+  }
 }
 
 // ── Condition tree rendering ──────────────────────────────────────────────
@@ -694,6 +727,9 @@ async function executeModalRun(dryRun) {
   const folderId = folderSel.value;
   if (!folderId) return;
 
+  const selectedFolder = folderList.find(f => f.id === folderId);
+  const accountId = selectedFolder?.accountId || null;
+
   const confirmBtn = document.getElementById("modal-confirm");
   const dryRunBtn = document.getElementById("modal-dry-run");
   const progress = document.getElementById("modal-progress");
@@ -719,7 +755,8 @@ async function executeModalRun(dryRun) {
           progressText.textContent = `Fetching message content… ${done}/${total}`;
         }
       },
-      dryRun
+      dryRun,
+      accountId
     );
 
     progressFill.style.width = "100%";

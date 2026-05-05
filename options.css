@@ -372,5 +372,40 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
   border-color: var(--accent);
 }
 
+/* ── Account checkboxes ───────────────────────────────────────────────────── */
+#accounts-list { display: flex; flex-direction: column; gap: 6px; }
+
+.account-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.account-checkbox input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+
+/* ── Dry-run hits list ────────────────────────────────────────────────────── */
+.dry-run-hits {
+  list-style: none;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.dry-run-hits li {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hit-from { color: var(--text-muted); flex-shrink: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hit-subject { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }

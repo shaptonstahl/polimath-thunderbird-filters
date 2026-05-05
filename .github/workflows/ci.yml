@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ── Run tests on every push and every PR ──────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run tests
+        run: npm test
+
+  # ── Build .xpi and publish a release — main branch only ──────────────────
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create releases and tags
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from manifest.json
+        id: version
+        run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build .xpi
+        run: |
+          zip -r "polimath-filters-${{ steps.version.outputs.version }}.xpi" \
+            manifest.json \
+            filter-engine.js \
+            background.js \
+            options.html \
+            options.js \
+            options.css \
+            icons/ \
+            LICENSE
+
+      # Always upload the .xpi as a workflow artifact so it is downloadable
+      # from the Actions tab regardless of whether a release is created.
+      - name: Upload .xpi as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: polimath-filters-${{ steps.version.outputs.version }}
+          path: polimath-filters-${{ steps.version.outputs.version }}.xpi
+
+      # Create a GitHub Release only when this version has not been released
+      # before.  If the tag already exists the step is silently skipped,
+      # which lets non-version-bump merges land on main without error.
+      - name: Check whether this version already has a release
+        id: check
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            "polimath-filters-${{ steps.version.outputs.version }}.xpi"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

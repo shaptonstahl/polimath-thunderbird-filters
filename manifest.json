@@ -1,0 +1,32 @@
+{
+  "manifest_version": 2,
+  "name": "Polimath Filters",
+  "version": "1.0.0",
+  "description": "Powerful email filters with regex and arbitrary boolean conditions.",
+  "author": "Stephen Haptonstahl",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "polimath-filters@haptonstahl.org",
+      "strict_min_version": "78.0"
+    }
+  },
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "permissions": [
+    "messagesRead",
+    "messagesMove",
+    "messagesDelete",
+    "messagesUpdate",
+    "accountsRead",
+    "storage"
+  ],
+  "background": {
+    "scripts": ["filter-engine.js", "background.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

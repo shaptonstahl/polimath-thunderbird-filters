@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polimath Filters</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Left panel: filter list ──────────────────────────────────────── -->
+  <aside id="filter-list-panel">
+    <header>
+      <h1>Filters</h1>
+      <div class="header-actions">
+        <button id="btn-new-filter" class="btn-primary">+ New Filter</button>
+        <button id="btn-run-all" class="btn-secondary">▶ Run all on folder…</button>
+      </div>
+    </header>
+    <ul id="filter-list">
+      <!-- populated by options.js -->
+    </ul>
+    <p id="filter-list-empty" class="empty-state">No filters yet. Click "+ New Filter" to create one.</p>
+  </aside>
+
+  <!-- ── Right panel: filter editor ──────────────────────────────────── -->
+  <main id="editor-panel" class="hidden">
+    <header>
+      <h2 id="editor-title">New Filter</h2>
+      <div class="editor-header-actions">
+        <button id="btn-save" class="btn-primary">Save</button>
+        <button id="btn-cancel" class="btn-ghost">Cancel</button>
+      </div>
+    </header>
+
+    <div class="editor-body">
+
+      <section class="editor-section">
+        <label for="filter-name">Filter name</label>
+        <input type="text" id="filter-name" placeholder="My filter" />
+      </section>
+
+      <section class="editor-section">
+        <h3>Conditions</h3>
+        <p class="hint">Build any combination of AND / OR / NOT conditions. Incoming mail stops at the first matching filter.</p>
+        <div id="condition-tree"></div>
+      </section>
+
+      <section class="editor-section">
+        <h3>Actions</h3>
+        <div id="actions-list"></div>
+        <button id="btn-add-action" class="btn-secondary">+ Add action</button>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ── Placeholder when nothing is selected ──────────────────────────── -->
+  <main id="editor-placeholder">
+    <div class="placeholder-inner">
+      <img src="icons/icon.svg" width="64" height="64" alt="" />
+      <p>Select a filter to edit, or create a new one.</p>
+    </div>
+  </main>
+
+</div>
+
+<!-- ── Folder picker modal ────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal">
+    <h2 id="modal-title">Choose a folder</h2>
+    <p id="modal-desc"></p>
+    <select id="modal-folder-select" size="8"></select>
+    <div id="modal-progress" class="hidden">
+      <div id="modal-progress-bar"><div id="modal-progress-fill"></div></div>
+      <p id="modal-progress-text"></p>
+    </div>
+    <div id="modal-result" class="hidden"></div>
+    <div class="modal-actions">
+      <button id="modal-dry-run" class="btn-secondary hidden">Dry Run</button>
+      <button id="modal-confirm" class="btn-primary">Run</button>
+      <button id="modal-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="filter-engine.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

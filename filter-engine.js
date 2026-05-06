@@ -207,11 +207,9 @@ async function fetchAllMessages(folderId) {
  * accountId, when provided, skips filters not scoped to that account.
  */
 async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null) {
-  const enabledFilters = filters.filter(f => {
-    if (!f.enabled) return false;
-    if (accountId && f.accountIds?.length && !f.accountIds.includes(accountId)) return false;
-    return true;
-  });
+  const enabledFilters = filters.filter(f =>
+    f.enabled && (!accountId || !f.accountIds?.length || f.accountIds.includes(accountId))
+  );
   if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: dryRun ? [] : null };
 
   const allMessages = await fetchAllMessages(folderId);

@@ -22,9 +22,9 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
     f.enabled && (!f.accountIds?.length || f.accountIds.includes(accountId))
   );
 
+  const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));
   for (const message of messageList.messages) {
     let fullMessage = null;
-    const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));
     if (needsFull) {
       try {
         fullMessage = await messenger.messages.getFull(message.id);

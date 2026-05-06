@@ -32,7 +32,7 @@ async function buildFolderList() {
   const accounts = await messenger.accounts.list(true);
   for (const account of accounts) {
     accountList.push({ id: account.id, name: account.name });
-    collectFolders(account.folders || [], account.name, account.id, folderList);
+    folderList.push(...collectFolders(account.folders || [], account.name, account.id));
   }
 }
 
@@ -45,14 +45,16 @@ async function loadTagList() {
   }
 }
 
-function collectFolders(folders, prefix, accountId, out) {
+function collectFolders(folders, prefix, accountId) {
+  const result = [];
   for (const folder of folders) {
     const label = prefix ? `${prefix} / ${folder.name}` : folder.name;
-    out.push({ id: folder.id, label, accountId });
-    if (folder.subFolders && folder.subFolders.length) {
-      collectFolders(folder.subFolders, label, accountId, out);
+    result.push({ id: folder.id, label, accountId });
+    if (folder.subFolders?.length) {
+      result.push(...collectFolders(folder.subFolders, label, accountId));
     }
   }
+  return result;
 }
 
 function populateFolderSelect(selectEl, selectedId) {

@@ -7,7 +7,7 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Arbitrary boolean logic** — nest AND, OR, and NOT groups to any depth
 - **Regular expression matching** — full ECMAScript (JavaScript) regex syntax
 - **Case-sensitivity toggle** — per-condition, defaults to case-insensitive
-- **Seven condition fields** — Subject, From, To, CC, BCC, Body, Has attachment
+- **Eight condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment
 - **Seven actions** — Move, Mark read/unread, Add/remove tag, Mark as junk, Delete
 - **Automatic filtering** — runs on new incoming mail
 - **Manual run** — apply any filter (or all filters) to an existing folder
@@ -34,9 +34,10 @@ Open the options page via **Tools → Add-on Options → Polimath Filters**, or 
 
 1. Click **+ New Filter**.
 2. Give the filter a name.
-3. Build a condition tree (see below).
-4. Add one or more actions.
-5. Click **Save**.
+3. Optionally restrict the filter to one or more accounts (see [Account scoping](#account-scoping)).
+4. Build a condition tree (see below).
+5. Add one or more actions.
+6. Click **Save**.
 
 Filters are evaluated in list order. For automatic new-mail filtering, the first matching filter wins and later filters are skipped for that message.
 
@@ -72,7 +73,8 @@ AND
 | Field | What is matched |
 |---|---|
 | Subject | The email subject line |
-| From | The sender's name and address |
+| From | The full sender field (name and address) |
+| From name | The display name only, extracted from `Name <addr>` format; empty if sender is address-only |
 | To | All To: recipients joined with `, ` |
 | CC | All CC: recipients (requires reading full message) |
 | BCC | All BCC: recipients (requires reading full message) |
@@ -108,6 +110,12 @@ AND
 | Delete | Moves to Trash |
 
 Multiple actions can be stacked on a single filter and execute in order.
+
+### Account scoping
+
+By default a filter runs on mail from any account. To limit a filter to specific accounts, check the accounts you want under the filter name in the editor. When at least one account is checked, the filter only runs on mail arriving in (or being scanned from) a matching account.
+
+This is useful when you have multiple email addresses with different naming conventions or different tagging schemes.
 
 ### Running filters manually
 
@@ -150,6 +158,7 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
   "id": "550e8400-e29b-41d4-a716-446655440000",   // UUID
   "name": "Archive invoices",
   "enabled": true,
+  "accountIds": [],                                // [] or omitted = all accounts; non-empty = restrict to listed account IDs
   "condition": { /* ConditionNode — see below */ },
   "actions": [ /* Action[] — see below */ ]
 }
@@ -167,7 +176,7 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
 // Leaf
 {
   "type": "condition",
-  "field": "subject" | "from" | "to" | "cc" | "bcc" | "body" | "attachment",
+  "field": "subject" | "from" | "from-name" | "to" | "cc" | "bcc" | "body" | "attachment",
   "operator": "contains" | "not-contains" | "is" | "is-not" |
                "starts-with" | "ends-with" | "regex",
   "value": "string",

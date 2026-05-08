@@ -80,19 +80,6 @@ function renderFilterList() {
     const li = document.createElement("li");
     li.className = "filter-item" + (editingIndex === idx ? " active" : "");
     li.dataset.idx = idx;
-    li.draggable = true;
-
-    li.addEventListener("dragstart", e => {
-      dragSrcIdx = idx;
-      e.dataTransfer.effectAllowed = "move";
-      li.classList.add("dragging");
-    });
-
-    li.addEventListener("dragend", () => {
-      dragSrcIdx = null;
-      li.classList.remove("dragging");
-      document.querySelectorAll(".filter-item.drag-over").forEach(el => el.classList.remove("drag-over"));
-    });
 
     li.addEventListener("dragover", e => {
       if (dragSrcIdx === null || dragSrcIdx === idx) return;
@@ -129,17 +116,29 @@ function renderFilterList() {
       renderFilterList();
     });
 
-    // Drag handle
+    // Drag handle — draggable is scoped here so clicks on the toggle/buttons aren't eaten by Gecko's drag handling
     const handle = document.createElement("span");
     handle.className = "drag-handle";
     handle.textContent = "⠿";
     handle.setAttribute("aria-hidden", "true");
+    handle.draggable = true;
     handle.addEventListener("click", e => e.stopPropagation());
+    handle.addEventListener("dragstart", e => {
+      dragSrcIdx = idx;
+      e.dataTransfer.effectAllowed = "move";
+      li.classList.add("dragging");
+    });
+    handle.addEventListener("dragend", () => {
+      dragSrcIdx = null;
+      li.classList.remove("dragging");
+      document.querySelectorAll(".filter-item.drag-over").forEach(el => el.classList.remove("drag-over"));
+    });
 
     // Toggle
     const toggle = document.createElement("label");
     toggle.className = "toggle";
     toggle.title = filter.enabled ? "Enabled" : "Disabled";
+    toggle.addEventListener("click", e => e.stopPropagation());
     const chk = document.createElement("input");
     chk.type = "checkbox";
     chk.checked = filter.enabled;

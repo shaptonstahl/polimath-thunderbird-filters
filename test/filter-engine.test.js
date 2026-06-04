@@ -12,7 +12,17 @@ const path = require('node:path');
 // each time we need action-call tracking, and share one static context for
 // the pure (no-messenger) tests.
 
-function makeContext(messages = [], fullMessages = {}, contactEmails = []) {
+// Mini confusables map for tests — codepoints chosen to cover the "costco" case.
+// Cyrillic uppercase: С(0421)→C, Ѕ(0405)→S, Т(0422)→T
+// Cyrillic lowercase: с(0441)→c, ѕ(0455)→s, т(0442)→t
+// Digit zero: 0(0030)→O  (ASCII source — only triggers confusable-with, not has-confusable)
+const TEST_CONFUSABLES_MAP = new Map([
+  [0x0421, 'C'], [0x0405, 'S'], [0x0422, 'T'],
+  [0x0441, 'c'], [0x0455, 's'], [0x0442, 't'],
+  [0x0030, 'O'],
+]);
+
+function makeContext(messages = [], fullMessages = {}, contactEmails = [], confusablesMap = null) {
   const calls = [];
   const contactNodes = contactEmails.map((email, i) => ({
     id: String(i),
@@ -37,6 +47,10 @@ function makeContext(messages = [], fullMessages = {}, contactEmails = []) {
   };
 
   const ctx = { messenger, console, calls };
+  // self-reference allows filter-engine.js to access `self.CONFUSABLES_MAP`
+  // the same way it does in a browser extension context.
+  ctx.self = ctx;
+  if (confusablesMap) ctx.CONFUSABLES_MAP = confusablesMap;
   createContext(ctx);
   runInContext(
     readFileSync(path.join(__dirname, '../filter-engine.js'), 'utf8'),
@@ -732,5 +746,63 @@ describe('runFiltersOnFolder — in-address-book', () => {
     );
     assert.equal(result.matched, 1);
     assert.equal(ctx.calls.length, 0);
+  });
+});
+
+// ── confusables operators ─────────────────────────────────────────────────────
+
+describe('confusables operators', () => {
+  // Context with TEST_CONFUSABLES_MAP injected.
+  const EC = makeContext([], {}, [], TEST_CONFUSABLES_MAP);
+
+  // "С0ЅТС0": Cyrillic С(0421) + digit 0(0030) + Cyrillic Ѕ(0405) +
+  //           Cyrillic Т(0422) + Cyrillic С(0421) + digit 0(0030)
+  // skeletonize → "COSTCO" → toLowerCase → "costco"
+  const FAKE_COSTCO = 'С0ЅТС0';
+
+  describe('has-confusable', () => {
+    it('ASCII-only string → false', () =>
+      assert.ok(!EC.applyOperator('has-confusable', 'costco', '', false)));
+    it('string with Cyrillic lookalike → true', () =>
+      assert.ok(EC.applyOperator('has-confusable', 'С ostco', '', false)));
+    it('digit zero alone → false (ASCII source, not flagged)', () =>
+      assert.ok(!EC.applyOperator('has-confusable', 'c0stco', '', false)));
+    it('mixed ASCII and Cyrillic → true', () =>
+      assert.ok(EC.applyOperator('has-confusable', FAKE_COSTCO, '', false)));
+    it('returns false when CONFUSABLES_MAP is not loaded', () => {
+      // E context has no map injected
+      assert.ok(!E.applyOperator('has-confusable', 'С', '', false));
+    });
+  });
+
+  describe('confusable-with', () => {
+    it('Cyrillic+digit string confusable with "costco" (case-insensitive)', () =>
+      assert.ok(EC.applyOperator('confusable-with', FAKE_COSTCO, 'costco', false)));
+    it('plain "costco" confusable with "costco"', () =>
+      assert.ok(EC.applyOperator('confusable-with', 'costco', 'costco', false)));
+    it('unrelated string → false', () =>
+      assert.ok(!EC.applyOperator('confusable-with', 'hello world', 'costco', false)));
+    it('empty condition value → false', () =>
+      assert.ok(!EC.applyOperator('confusable-with', FAKE_COSTCO, '', false)));
+    it('confusable match found inside longer subject', () => {
+      // "Buy from С0ЅТС0 today!" should match "confusable-with costco"
+      assert.ok(EC.applyOperator('confusable-with', 'Buy from ' + FAKE_COSTCO + ' today!', 'costco', false));
+    });
+    it('returns false when CONFUSABLES_MAP is not loaded', () => {
+      assert.ok(!E.applyOperator('confusable-with', FAKE_COSTCO, 'costco', false));
+    });
+  });
+
+  describe('confusable-with via evaluateNode', () => {
+    it('filter on subject field matches confusable subject', () => {
+      const msg = { subject: 'Buy from ' + FAKE_COSTCO + ' today!', author: '', recipients: [] };
+      const cond = { type: 'condition', field: 'subject', operator: 'confusable-with', value: 'costco', caseSensitive: false };
+      assert.ok(EC.evaluateNode(cond, msg, null));
+    });
+    it('filter on subject field does not match unrelated subject', () => {
+      const msg = { subject: 'Meeting notes', author: '', recipients: [] };
+      const cond = { type: 'condition', field: 'subject', operator: 'confusable-with', value: 'costco', caseSensitive: false };
+      assert.ok(!EC.evaluateNode(cond, msg, null));
+    });
   });
 });

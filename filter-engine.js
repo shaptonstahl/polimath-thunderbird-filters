@@ -58,6 +58,20 @@ function getField(field, message, fullMessage, addressBookEmails = null) {
 
 const _regexCache = new Map();
 
+// Replace each character with its confusables skeleton string (single pass).
+// Skeletonize before case-folding so that ASCII-lookalike targets (e.g. "O" from
+// digit zero) are lowercased by the caller, not by this function.
+function skeletonize(str) {
+  const map = typeof CONFUSABLES_MAP !== "undefined" ? CONFUSABLES_MAP : null;
+  if (!map) return str;
+  let out = "";
+  for (const ch of str.normalize("NFD")) {
+    const cp = ch.codePointAt(0);
+    out += map.get(cp) ?? ch;
+  }
+  return out.normalize("NFD");
+}
+
 function applyOperator(operator, fieldValue, conditionValue, caseSensitive) {
   const fv = caseSensitive ? fieldValue : fieldValue.toLowerCase();
   const cv = caseSensitive ? conditionValue : conditionValue.toLowerCase();
@@ -83,6 +97,26 @@ function applyOperator(operator, fieldValue, conditionValue, caseSensitive) {
         _regexCache.set(key, re);
       }
       return re ? re.test(fieldValue) : false;
+    }
+    case "has-confusable": {
+      const map = typeof CONFUSABLES_MAP !== "undefined" ? CONFUSABLES_MAP : null;
+      if (!map) return false;
+      for (const ch of fieldValue.normalize("NFD")) {
+        const cp = ch.codePointAt(0);
+        // Only flag non-ASCII characters that have a confusable mapping.
+        if (cp > 0x7e && map.has(cp)) return true;
+      }
+      return false;
+    }
+    case "confusable-with": {
+      if (!conditionValue) return false;
+      // Skeletonize first, then case-fold, so that uppercase skeleton targets
+      // (e.g. "O" produced by digit zero) are normalised by toLowerCase.
+      const normalize = s => {
+        const sk = skeletonize(s);
+        return caseSensitive ? sk : sk.toLowerCase();
+      };
+      return normalize(fieldValue).includes(normalize(conditionValue));
     }
     default:
       return false;

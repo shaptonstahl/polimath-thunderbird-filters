@@ -309,14 +309,19 @@ const FIELDS = [
 const BOOLEAN_FIELDS = new Set(["attachment", "in-address-book"]);
 
 const OPERATORS = [
-  { value: "contains",     label: "contains" },
-  { value: "not-contains", label: "does not contain" },
-  { value: "is",           label: "is" },
-  { value: "is-not",       label: "is not" },
-  { value: "starts-with",  label: "starts with" },
-  { value: "ends-with",    label: "ends with" },
-  { value: "regex",        label: "matches regex" },
+  { value: "contains",        label: "contains" },
+  { value: "not-contains",    label: "does not contain" },
+  { value: "is",              label: "is" },
+  { value: "is-not",          label: "is not" },
+  { value: "starts-with",     label: "starts with" },
+  { value: "ends-with",       label: "ends with" },
+  { value: "regex",           label: "matches regex" },
+  { value: "has-confusable",  label: "has confusable character" },
+  { value: "confusable-with", label: "confusable with" },
 ];
+
+// Operators that take no value input (the value field is irrelevant).
+const NO_VALUE_OPS = new Set(["has-confusable"]);
 
 function renderConditionTree() {
   const container = document.getElementById("condition-tree");
@@ -552,11 +557,18 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
       valInput.value = node.value || "";
       valInput.placeholder = node.operator === "regex" ? "regular expression" : "value";
       valInput.addEventListener("input", () => { node.value = valInput.value; });
-      opSel.addEventListener("change", () => {
-        valInput.placeholder = opSel.value === "regex" ? "regular expression" : "value";
-      });
 
       const caseToggle = makeCaseToggle(node);
+
+      const updateValueVisibility = () => {
+        const hide = NO_VALUE_OPS.has(opSel.value);
+        valInput.style.display = hide ? "none" : "";
+        caseToggle.style.display = hide ? "none" : "";
+        if (opSel.value === "regex") valInput.placeholder = "regular expression";
+        else if (!hide) valInput.placeholder = "value";
+      };
+      opSel.addEventListener("change", updateValueVisibility);
+      updateValueVisibility();
 
       header.appendChild(fieldSel);
       header.appendChild(opSel);

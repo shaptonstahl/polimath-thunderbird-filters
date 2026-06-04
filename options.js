@@ -12,6 +12,9 @@ let folderList = [];       // [{id, label, accountId}] populated on load
 let accountList = [];      // [{id, name}] populated on load
 let tagList = [];          // [{key, tag}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
+let importCandidates = []; // filters parsed from an import file, pending selection
+let compareIdx = null;     // index into importCandidates currently open in compare modal
+let compareExistingFilter = null; // reference into allFilters for current compare
 
 // ── Storage helpers ───────────────────────────────────────────────────────
 
@@ -826,6 +829,214 @@ async function executeModalRun(dryRun) {
 document.getElementById("modal-confirm").addEventListener("click", () => executeModalRun(false));
 document.getElementById("modal-dry-run").addEventListener("click", () => executeModalRun(true));
 
+// ── Export ────────────────────────────────────────────────────────────────
+
+function openExportModal() {
+  const list = document.getElementById("export-filter-list");
+  list.innerHTML = "";
+  allFilters.forEach((filter, idx) => {
+    const li = document.createElement("li");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = true;
+    chk.id = `export-chk-${idx}`;
+    const label = document.createElement("label");
+    label.htmlFor = `export-chk-${idx}`;
+    label.className = "import-item-name";
+    label.textContent = filter.name || "(unnamed)";
+    li.appendChild(chk);
+    li.appendChild(label);
+    list.appendChild(li);
+  });
+  document.getElementById("modal-export-overlay").classList.remove("hidden");
+}
+
+function doExport() {
+  const selected = allFilters.filter((_, idx) => {
+    const chk = document.getElementById(`export-chk-${idx}`);
+    return chk && chk.checked;
+  });
+  if (selected.length === 0) { alert("Select at least one filter to export."); return; }
+
+  const mf = messenger.runtime.getManifest();
+  const envelope = {
+    exportedBy: "Polimath Filters",
+    extensionVersion: mf.version,
+    exportedAt: new Date().toISOString(),
+    platform: navigator.userAgentData?.platform || "unknown",
+    filterCount: selected.length,
+    filters: selected,
+  };
+  const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `polimath-filters-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  document.getElementById("modal-export-overlay").classList.add("hidden");
+}
+
+// ── Import ────────────────────────────────────────────────────────────────
+
+function handleImportFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    let parsed;
+    try { parsed = JSON.parse(e.target.result); } catch {
+      alert("Could not parse file — make sure it is a valid Polimath Filters export.");
+      return;
+    }
+    if (!Array.isArray(parsed.filters)) {
+      alert("This file does not appear to be a Polimath Filters export.");
+      return;
+    }
+    const valid = parsed.filters.filter(f => f && f.name && f.condition && Array.isArray(f.actions));
+    if (valid.length === 0) { alert("No valid filters found in this file."); return; }
+    importCandidates = valid.map(f => JSON.parse(JSON.stringify(f)));
+    openImportModal(parsed);
+  };
+  reader.readAsText(file);
+}
+
+function openImportModal(meta) {
+  const metaDiv = document.getElementById("import-file-meta");
+  metaDiv.innerHTML = "";
+  if (meta.exportedAt) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    const date = new Date(meta.exportedAt).toLocaleString();
+    p.textContent = `Exported: ${date} · v${meta.extensionVersion ?? "?"} · ${meta.platform ?? "?"}`;
+    metaDiv.appendChild(p);
+  }
+  renderImportList();
+  const hasMoveActions = importCandidates.some(f => f.actions.some(a => a.type === "move"));
+  document.getElementById("import-move-warn").classList.toggle("hidden", !hasMoveActions);
+  document.getElementById("modal-import-overlay").classList.remove("hidden");
+}
+
+function renderImportList() {
+  const list = document.getElementById("import-filter-list");
+  list.innerHTML = "";
+  const existingNames = new Set(allFilters.map(f => f.name));
+  importCandidates.forEach((candidate, idx) => {
+    const isConflict = existingNames.has(candidate.name);
+    const li = document.createElement("li");
+    li.className = "import-item" + (isConflict ? " import-conflict" : "");
+    li.id = `import-item-${idx}`;
+
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = true;
+    chk.id = `import-chk-${idx}`;
+    chk.addEventListener("change", updateImportConfirmBtn);
+
+    const label = document.createElement("label");
+    label.htmlFor = `import-chk-${idx}`;
+    label.className = "import-item-name";
+    label.textContent = candidate.name;
+
+    li.appendChild(chk);
+    li.appendChild(label);
+
+    if (isConflict) {
+      const badge = document.createElement("span");
+      badge.className = "conflict-badge";
+      badge.textContent = "⚠ Name conflict";
+      const cmpBtn = document.createElement("button");
+      cmpBtn.className = "btn-ghost compare-btn";
+      cmpBtn.textContent = "Compare…";
+      cmpBtn.addEventListener("click", () => openCompareModal(idx));
+      li.appendChild(badge);
+      li.appendChild(cmpBtn);
+    }
+
+    list.appendChild(li);
+  });
+  updateImportConfirmBtn();
+}
+
+function updateImportConfirmBtn() {
+  const anyChecked = importCandidates.some((_, idx) => {
+    const chk = document.getElementById(`import-chk-${idx}`);
+    return chk?.checked;
+  });
+  document.getElementById("import-confirm").disabled = !anyChecked;
+}
+
+function refreshImportConflictRow(idx) {
+  const li = document.getElementById(`import-item-${idx}`);
+  if (!li) return;
+  const existingNames = new Set(allFilters.map(f => f.name));
+  const candidate = importCandidates[idx];
+  const isConflict = existingNames.has(candidate.name);
+
+  li.classList.toggle("import-conflict", isConflict);
+  const label = li.querySelector(".import-item-name");
+  if (label) label.textContent = candidate.name;
+
+  const existingBadge = li.querySelector(".conflict-badge");
+  const existingCmpBtn = li.querySelector(".compare-btn");
+  if (isConflict && !existingBadge) {
+    const badge = document.createElement("span");
+    badge.className = "conflict-badge";
+    badge.textContent = "⚠ Name conflict";
+    const cmpBtn = document.createElement("button");
+    cmpBtn.className = "btn-ghost compare-btn";
+    cmpBtn.textContent = "Compare…";
+    cmpBtn.addEventListener("click", () => openCompareModal(idx));
+    li.appendChild(badge);
+    li.appendChild(cmpBtn);
+  } else if (!isConflict) {
+    existingBadge?.remove();
+    existingCmpBtn?.remove();
+  }
+}
+
+async function doImportSelected() {
+  importCandidates.forEach((candidate, idx) => {
+    const chk = document.getElementById(`import-chk-${idx}`);
+    if (!chk?.checked) return;
+    const imported = JSON.parse(JSON.stringify(candidate));
+    imported.id = crypto.randomUUID();
+    allFilters.push(imported);
+  });
+  await saveFilters();
+  renderFilterList();
+  document.getElementById("modal-import-overlay").classList.add("hidden");
+  importCandidates = [];
+}
+
+// ── Compare ───────────────────────────────────────────────────────────────
+
+function openCompareModal(idx) {
+  compareIdx = idx;
+  const candidate = importCandidates[idx];
+  compareExistingFilter = allFilters.find(f => f.name === candidate.name) ?? null;
+
+  const existingNameInput = document.getElementById("compare-existing-name");
+  existingNameInput.value = compareExistingFilter?.name ?? "(not found)";
+  existingNameInput.disabled = !compareExistingFilter;
+
+  const existingDefEl = document.getElementById("compare-existing-def");
+  if (compareExistingFilter) {
+    const { id: _id, ...rest } = compareExistingFilter;
+    existingDefEl.textContent = JSON.stringify(rest, null, 2);
+  } else {
+    existingDefEl.textContent = "(filter not found)";
+  }
+
+  const importingNameInput = document.getElementById("compare-importing-name");
+  importingNameInput.value = candidate.name;
+
+  const { id: _id, ...candidateRest } = candidate;
+  document.getElementById("compare-importing-def").textContent = JSON.stringify(candidateRest, null, 2);
+
+  document.getElementById("modal-compare-overlay").classList.remove("hidden");
+}
+
 // ── Wire up top-level buttons ─────────────────────────────────────────────
 
 document.getElementById("btn-new-filter").addEventListener("click", openNewEditor);
@@ -845,6 +1056,80 @@ document.getElementById("btn-cancel").addEventListener("click", () => {
 document.getElementById("btn-add-action").addEventListener("click", () => {
   editingFilter.actions.push({ type: "mark-read" });
   renderActionsList();
+});
+
+document.getElementById("btn-export").addEventListener("click", openExportModal);
+
+document.getElementById("export-select-all").addEventListener("click", () => {
+  allFilters.forEach((_, idx) => {
+    const chk = document.getElementById(`export-chk-${idx}`);
+    if (chk) chk.checked = true;
+  });
+});
+document.getElementById("export-deselect-all").addEventListener("click", () => {
+  allFilters.forEach((_, idx) => {
+    const chk = document.getElementById(`export-chk-${idx}`);
+    if (chk) chk.checked = false;
+  });
+});
+document.getElementById("export-confirm").addEventListener("click", doExport);
+document.getElementById("export-cancel").addEventListener("click", () => {
+  document.getElementById("modal-export-overlay").classList.add("hidden");
+});
+document.getElementById("modal-export-overlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-export-overlay"))
+    document.getElementById("modal-export-overlay").classList.add("hidden");
+});
+
+document.getElementById("btn-import").addEventListener("click", () => {
+  document.getElementById("import-file-input").click();
+});
+document.getElementById("import-file-input").addEventListener("change", e => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (file) handleImportFile(file);
+});
+document.getElementById("import-select-all").addEventListener("click", () => {
+  importCandidates.forEach((_, idx) => {
+    const chk = document.getElementById(`import-chk-${idx}`);
+    if (chk) chk.checked = true;
+  });
+  updateImportConfirmBtn();
+});
+document.getElementById("import-deselect-all").addEventListener("click", () => {
+  importCandidates.forEach((_, idx) => {
+    const chk = document.getElementById(`import-chk-${idx}`);
+    if (chk) chk.checked = false;
+  });
+  updateImportConfirmBtn();
+});
+document.getElementById("import-confirm").addEventListener("click", doImportSelected);
+document.getElementById("import-cancel").addEventListener("click", () => {
+  document.getElementById("modal-import-overlay").classList.add("hidden");
+  importCandidates = [];
+});
+document.getElementById("modal-import-overlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-import-overlay")) {
+    if (!document.getElementById("modal-compare-overlay").classList.contains("hidden")) return;
+    document.getElementById("modal-import-overlay").classList.add("hidden");
+    importCandidates = [];
+  }
+});
+
+document.getElementById("compare-existing-name").addEventListener("input", async e => {
+  if (!compareExistingFilter) return;
+  compareExistingFilter.name = e.target.value;
+  await saveFilters();
+  renderFilterList();
+  if (compareIdx !== null) refreshImportConflictRow(compareIdx);
+});
+document.getElementById("compare-importing-name").addEventListener("input", e => {
+  if (compareIdx === null) return;
+  importCandidates[compareIdx].name = e.target.value;
+  refreshImportConflictRow(compareIdx);
+});
+document.getElementById("compare-done").addEventListener("click", () => {
+  document.getElementById("modal-compare-overlay").classList.add("hidden");
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────

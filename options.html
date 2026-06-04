@@ -17,6 +17,9 @@
       <div class="header-actions">
         <button id="btn-new-filter" class="btn-primary">+ New Filter</button>
         <button id="btn-run-all" class="btn-secondary">▶ Run all on folder…</button>
+        <button id="btn-export" class="btn-secondary">Export…</button>
+        <button id="btn-import" class="btn-secondary">Import…</button>
+        <input type="file" id="import-file-input" accept=".json" class="hidden" />
       </div>
     </header>
     <ul id="filter-list">
@@ -88,6 +91,64 @@
       <button id="modal-dry-run" class="btn-secondary hidden">Dry Run</button>
       <button id="modal-confirm" class="btn-primary">Run</button>
       <button id="modal-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Export modal ───────────────────────────────────────────────────────── -->
+<div id="modal-export-overlay" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>Export Filters</h2>
+    <p class="hint">Select the filters to include in the export file.</p>
+    <div class="modal-select-all-row">
+      <button id="export-select-all" class="btn-ghost">Select all</button>
+      <button id="export-deselect-all" class="btn-ghost">Deselect all</button>
+    </div>
+    <ul id="export-filter-list" class="check-list"></ul>
+    <div class="modal-actions">
+      <button id="export-confirm" class="btn-primary">Export</button>
+      <button id="export-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Import modal ───────────────────────────────────────────────────────── -->
+<div id="modal-import-overlay" class="modal-overlay hidden">
+  <div class="modal-box modal-box-wide">
+    <h2>Import Filters</h2>
+    <div id="import-file-meta"></div>
+    <div class="modal-select-all-row">
+      <button id="import-select-all" class="btn-ghost">Select all</button>
+      <button id="import-deselect-all" class="btn-ghost">Deselect all</button>
+    </div>
+    <ul id="import-filter-list" class="check-list"></ul>
+    <p id="import-move-warn" class="hint hidden">⚠ Some filters use "Move to folder" actions. Folder IDs are machine-specific — you may need to reconfigure those actions after importing.</p>
+    <div class="modal-actions">
+      <button id="import-confirm" class="btn-primary" disabled>Import Selected</button>
+      <button id="import-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Compare modal ──────────────────────────────────────────────────────── -->
+<div id="modal-compare-overlay" class="modal-overlay hidden">
+  <div class="modal-box modal-box-compare">
+    <h2>Compare Filters</h2>
+    <p class="hint">Edit names to resolve the conflict. Changes take effect immediately.</p>
+    <div id="compare-grid">
+      <div class="compare-col">
+        <h3>Existing</h3>
+        <input type="text" id="compare-existing-name" class="compare-name-input" />
+        <pre id="compare-existing-def" class="filter-def"></pre>
+      </div>
+      <div class="compare-col">
+        <h3>Importing</h3>
+        <input type="text" id="compare-importing-name" class="compare-name-input" />
+        <pre id="compare-importing-def" class="filter-def"></pre>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="compare-done" class="btn-primary">Done</button>
     </div>
   </div>
 </div>

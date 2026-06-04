@@ -409,3 +409,127 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
 
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
+
+/* ── Header wrapping (for export/import buttons) ──────────────────────────── */
+.header-actions { flex-wrap: wrap; }
+
+/* ── Generic modal overlay (export / import / compare) ────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+
+.modal-box {
+  background: var(--panel-bg);
+  border-radius: 10px;
+  padding: 24px;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-box h2 { font-size: 15px; font-weight: 600; }
+
+.modal-box-wide { width: 540px; }
+
+.modal-box-compare {
+  width: 780px;
+  max-width: 96vw;
+}
+
+/* ── Check-list (export / import filter lists) ────────────────────────────── */
+.check-list {
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.check-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.check-list li:last-child { border-bottom: none; }
+
+.check-list input[type="checkbox"] { flex-shrink: 0; width: 14px; height: 14px; cursor: pointer; }
+
+.import-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+
+/* ── Conflict rows ────────────────────────────────────────────────────────── */
+.import-conflict {
+  background: #fff8e6;
+  border-left: 3px solid #e8a020 !important;
+}
+
+.conflict-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7a4f00;
+  background: #fde9b0;
+  border: 1px solid #e8a020;
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Modal select-all row ─────────────────────────────────────────────────── */
+.modal-select-all-row {
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Compare grid ─────────────────────────────────────────────────────────── */
+#compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.compare-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compare-col h3 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+}
+
+.compare-name-input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  width: 100%;
+}
+
+.filter-def {
+  font-size: 11px;
+  font-family: "Menlo", "Consolas", monospace;
+  background: #f5f5f7;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  overflow: auto;
+  max-height: 360px;
+  white-space: pre;
+  flex: 1;
+}

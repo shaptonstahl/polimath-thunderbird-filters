@@ -27,7 +27,7 @@ options.js         Options page UI — filter list, condition tree editor, run-o
 The test suite (`test/filter-engine.test.js`) uses Node.js built-in `node:test` and `node:vm`. It creates isolated VM contexts to inject a mock `messenger` object, then loads `filter-engine.js` into that context. This allows testing a browser-extension script in Node without a browser.
 
 - Pure-function tests share a single context (`const E = makeContext()`).
-- Action-tracking tests create a fresh context per test via `makeContext(messages, fullMessages)` so `calls` arrays don't bleed between tests.
+- Action-tracking tests create a fresh context per test via `makeContext(messages, fullMessages, contactEmails)` so `calls` arrays don't bleed between tests. `contactEmails` is an array of address strings used to populate the mock `messenger.addressBooks`/`messenger.contacts`.
 
 Do not introduce external test dependencies. Do not mock the DOM — options.js is not tested by the automated suite.
 
@@ -35,6 +35,9 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 
 - **First-match semantics**: for each message, filters are evaluated in list order and evaluation stops at the first match. This mirrors Thunderbird's built-in filter runner. See `docs/decisions/ADR-001-first-match-and-consumed-messages.md`.
 - **Eager full-message prefetch**: when any active filter needs body/cc/bcc, `runFiltersOnFolder` fetches full content for all messages up front in parallel batches of 10 before evaluating any conditions. The trade-off is documented in `docs/decisions/ADR-002-eager-full-message-prefetch.md`.
+- **Eager address-book prefetch**: same pattern as full-message prefetch — when any active filter uses `in-address-book`, `fetchAddressBookEmails` is called once before the evaluation loop and kicked off in parallel with full-message prefetching. Documented in `docs/decisions/ADR-003-eager-address-book-prefetch.md`.
+- **`conditionNeedsProp(node, predicate)`**: the generic tree-walk helper for detecting whether a condition tree touches any field matching a predicate. Both `conditionNeedsFullMessage` and `conditionNeedsAddressBook` delegate to it. Add new external-data condition checks the same way.
+- **`BOOLEAN_FIELDS` Set in `options.js`**: controls which fields render as a yes/no select (no operator, no text input). Add new boolean-style fields here in addition to `getField`.
 - **Regex caching**: compiled regexes are cached by `pattern\x00caseSensitive` key for the lifetime of the page. The null-byte separator is intentional — it cannot appear in a user-supplied pattern or boolean.
 - **`collectFolders` returns a value**: the helper returns an array (not an output-parameter accumulator) to match modern JS conventions.
 

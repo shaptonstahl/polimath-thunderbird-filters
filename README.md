@@ -7,7 +7,7 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Arbitrary boolean logic** — nest AND, OR, and NOT groups to any depth
 - **Regular expression matching** — full ECMAScript (JavaScript) regex syntax
 - **Case-sensitivity toggle** — per-condition, defaults to case-insensitive
-- **Eight condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment
+- **Nine condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment, Sender in address book
 - **Seven actions** — Move, Mark read/unread, Add/remove tag, Mark as junk, Delete
 - **Automatic filtering** — runs on new incoming mail
 - **Manual run** — apply any filter (or all filters) to an existing folder
@@ -80,10 +80,11 @@ AND
 | BCC | All BCC: recipients (requires reading full message) |
 | Body | Full plain-text body; HTML tags are stripped (requires reading full message) |
 | Has attachment | `yes` or `no` |
+| Sender in address book | `in address book` or `not in address book` — checks the sender's email against all of your Thunderbird address books, including remote/CardDAV sources like Google Contacts |
 
 > CC, BCC, and Body conditions trigger a full message download. For large folders, place these conditions inside an AND group after cheaper header conditions so short-circuit evaluation can skip the download for non-matching messages.
 
-**Operators** (not available for Has attachment)
+**Operators** (not available for Has attachment or Sender in address book)
 
 | Operator | Behaviour |
 |---|---|
@@ -176,7 +177,7 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
 // Leaf
 {
   "type": "condition",
-  "field": "subject" | "from" | "from-name" | "to" | "cc" | "bcc" | "body" | "attachment",
+  "field": "subject" | "from" | "from-name" | "to" | "cc" | "bcc" | "body" | "attachment" | "in-address-book",
   "operator": "contains" | "not-contains" | "is" | "is-not" |
                "starts-with" | "ends-with" | "regex",
   "value": "string",

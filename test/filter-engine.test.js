@@ -12,8 +12,12 @@ const path = require('node:path');
 // each time we need action-call tracking, and share one static context for
 // the pure (no-messenger) tests.
 
-function makeContext(messages = [], fullMessages = {}) {
+function makeContext(messages = [], fullMessages = {}, contactEmails = []) {
   const calls = [];
+  const contactNodes = contactEmails.map((email, i) => ({
+    id: String(i),
+    properties: { PrimaryEmail: email },
+  }));
   const messenger = {
     messages: {
       list:         async ()     => ({ messages, id: null }),
@@ -23,6 +27,12 @@ function makeContext(messages = [], fullMessages = {}) {
       move:         async (ids, folderId)   => calls.push({ type: 'move', ids, folderId }),
       update:       async (id, props)       => calls.push({ type: 'update', id, props }),
       delete:       async (ids, skipTrash)  => calls.push({ type: 'delete', ids, skipTrash }),
+    },
+    addressBooks: {
+      list: async () => [{ id: 'book1' }],
+    },
+    contacts: {
+      list: async () => contactNodes,
     },
   };
 
@@ -623,5 +633,104 @@ describe('runFiltersOnFolder', () => {
       (evt) => progressEvents.push(evt),
     );
     assert.ok(progressEvents.some(e => e.stage === 'fetching'));
+  });
+});
+
+// ── in-address-book condition ─────────────────────────────────────────────────
+
+describe('conditionNeedsAddressBook', () => {
+  it('returns true for in-address-book field', () => {
+    const cond = { type: 'condition', field: 'in-address-book', operator: 'is', value: 'true' };
+    assert.equal(E.conditionNeedsAddressBook(cond), true);
+  });
+
+  it('returns false for other fields', () => {
+    const cond = { type: 'condition', field: 'from', operator: 'contains', value: 'x' };
+    assert.equal(E.conditionNeedsAddressBook(cond), false);
+  });
+
+  it('returns true when nested inside AND', () => {
+    const node = { type: 'and', children: [
+      { type: 'condition', field: 'subject', operator: 'contains', value: 'hi' },
+      { type: 'condition', field: 'in-address-book', operator: 'is', value: 'true' },
+    ]};
+    assert.equal(E.conditionNeedsAddressBook(node), true);
+  });
+
+  it('returns true through NOT wrapper', () => {
+    const node = { type: 'not', child: { type: 'condition', field: 'in-address-book', operator: 'is', value: 'false' } };
+    assert.equal(E.conditionNeedsAddressBook(node), true);
+  });
+});
+
+describe('evaluateNode — in-address-book', () => {
+  const knownEmail = 'alice@example.com';
+  const bookEmails = new Set([knownEmail]);
+
+  const knownMsg   = { id: 1, subject: '', author: 'Alice <alice@example.com>', recipients: [], hasAttachment: false };
+  const unknownMsg = { id: 2, subject: '', author: 'Bob <bob@unknown.com>',     recipients: [], hasAttachment: false };
+  const bareMsg    = { id: 3, subject: '', author: 'alice@example.com',          recipients: [], hasAttachment: false };
+
+  const inBookCond  = { type: 'condition', field: 'in-address-book', operator: 'is', value: 'true' };
+  const notBookCond = { type: 'condition', field: 'in-address-book', operator: 'is', value: 'false' };
+
+  it('matches sender with "Name <email>" format when in address book', () => {
+    assert.equal(E.evaluateNode(inBookCond, knownMsg, null, bookEmails), true);
+  });
+
+  it('does not match sender not in address book', () => {
+    assert.equal(E.evaluateNode(inBookCond, unknownMsg, null, bookEmails), false);
+  });
+
+  it('matches bare email format', () => {
+    assert.equal(E.evaluateNode(inBookCond, bareMsg, null, bookEmails), true);
+  });
+
+  it('matches negated condition for unknown sender', () => {
+    assert.equal(E.evaluateNode(notBookCond, unknownMsg, null, bookEmails), true);
+  });
+
+  it('returns false when addressBookEmails is null (address book unavailable)', () => {
+    assert.equal(E.evaluateNode(inBookCond, knownMsg, null, null), false);
+  });
+
+  it('is case-insensitive for email addresses', () => {
+    const upperMsg = { id: 4, subject: '', author: 'Alice <ALICE@EXAMPLE.COM>', recipients: [], hasAttachment: false };
+    assert.equal(E.evaluateNode(inBookCond, upperMsg, null, bookEmails), true);
+  });
+});
+
+describe('runFiltersOnFolder — in-address-book', () => {
+  const knownMsg   = { id: 1, subject: 'hi', author: 'Alice <alice@example.com>', recipients: [], hasAttachment: false };
+  const unknownMsg = { id: 2, subject: 'hi', author: 'Bob <bob@unknown.com>',     recipients: [], hasAttachment: false };
+
+  const inBookCond = { type: 'condition', field: 'in-address-book', operator: 'is', value: 'true' };
+
+  function mkABFilter(id, cond, actions) {
+    return { id, name: id, enabled: true, condition: cond, actions };
+  }
+
+  it('matches only messages from address book contacts', async () => {
+    const ctx = makeContext([knownMsg, unknownMsg], {}, ['alice@example.com']);
+    const result = await ctx.runFiltersOnFolder(
+      [mkABFilter('f1', inBookCond, [{ type: 'mark-read' }])],
+      'inbox',
+    );
+    assert.equal(result.matched, 1);
+    const updateCalls = ctx.calls.filter(c => c.type === 'update');
+    assert.equal(updateCalls.length, 1);
+    assert.equal(updateCalls[0].id, 1);
+  });
+
+  it('dry run counts address book matches without executing actions', async () => {
+    const ctx = makeContext([knownMsg, unknownMsg], {}, ['alice@example.com']);
+    const result = await ctx.runFiltersOnFolder(
+      [mkABFilter('f1', inBookCond, [{ type: 'mark-read' }])],
+      'inbox',
+      null,
+      true,
+    );
+    assert.equal(result.matched, 1);
+    assert.equal(ctx.calls.length, 0);
   });
 });

@@ -22,7 +22,7 @@ function extractBodyText(parts) {
   return text;
 }
 
-function getField(field, message, fullMessage) {
+function getField(field, message, fullMessage, addressBookEmails = null) {
   switch (field) {
     case "subject":
       return message.subject || "";
@@ -43,6 +43,12 @@ function getField(field, message, fullMessage) {
       return fullMessage ? extractBodyText(fullMessage.parts) : "";
     case "attachment":
       return message.hasAttachment ? "true" : "false";
+    case "in-address-book": {
+      const author = message.author || "";
+      const m = author.match(/<([^>]+)>/) || author.match(/(\S+@\S+)/);
+      const email = (m ? m[1] : author).toLowerCase();
+      return addressBookEmails?.has(email) ? "true" : "false";
+    }
     default:
       return "";
   }
@@ -85,33 +91,50 @@ function applyOperator(operator, fieldValue, conditionValue, caseSensitive) {
 
 // ── Condition needs full message? ────────────────────────────────────────────
 
-function conditionNeedsFullMessage(node) {
-  if (node.type === "condition") {
-    return node.field === "body" || node.field === "cc" || node.field === "bcc";
-  }
-  if (node.type === "not") {
-    return conditionNeedsFullMessage(node.child);
-  }
-  if (node.type === "and" || node.type === "or") {
-    return node.children.some(conditionNeedsFullMessage);
-  }
+function conditionNeedsProp(node, predicate) {
+  if (node.type === "condition") return predicate(node.field);
+  if (node.type === "not") return conditionNeedsProp(node.child, predicate);
+  if (node.type === "and" || node.type === "or") return node.children.some(c => conditionNeedsProp(c, predicate));
   return false;
+}
+
+function conditionNeedsFullMessage(node) {
+  return conditionNeedsProp(node, f => f === "body" || f === "cc" || f === "bcc");
+}
+
+function conditionNeedsAddressBook(node) {
+  return conditionNeedsProp(node, f => f === "in-address-book");
+}
+
+// ── Address book helpers ─────────────────────────────────────────────────────
+
+async function fetchAddressBookEmails() {
+  const books = await messenger.addressBooks.list({ includeRemote: true });
+  const allContacts = await Promise.all(books.map(b => messenger.contacts.list(b.id)));
+  const emails = new Set();
+  for (const contacts of allContacts) {
+    for (const c of contacts) {
+      if (c.properties?.PrimaryEmail) emails.add(c.properties.PrimaryEmail.toLowerCase());
+      if (c.properties?.SecondEmail) emails.add(c.properties.SecondEmail.toLowerCase());
+    }
+  }
+  return emails;
 }
 
 // ── Condition tree evaluation ────────────────────────────────────────────────
 
-function evaluateNode(node, message, fullMessage) {
+function evaluateNode(node, message, fullMessage, addressBookEmails = null) {
   if (node.type === "and") {
-    return node.children.every(child => evaluateNode(child, message, fullMessage));
+    return node.children.every(child => evaluateNode(child, message, fullMessage, addressBookEmails));
   }
   if (node.type === "or") {
-    return node.children.some(child => evaluateNode(child, message, fullMessage));
+    return node.children.some(child => evaluateNode(child, message, fullMessage, addressBookEmails));
   }
   if (node.type === "not") {
-    return !evaluateNode(node.child, message, fullMessage);
+    return !evaluateNode(node.child, message, fullMessage, addressBookEmails);
   }
   if (node.type === "condition") {
-    const fieldValue = getField(node.field, message, fullMessage);
+    const fieldValue = getField(node.field, message, fullMessage, addressBookEmails);
     return applyOperator(node.operator, fieldValue, node.value || "", node.caseSensitive === true);
   }
   return false;
@@ -171,9 +194,9 @@ async function executeActions(actions, message) {
  * fullMessage may be null if you know the filter doesn't need body/cc/bcc.
  * When dryRun is true, evaluates the condition but skips executing actions.
  */
-async function runFilter(filter, message, fullMessage, dryRun = false) {
+async function runFilter(filter, message, fullMessage, dryRun = false, addressBookEmails = null) {
   if (!filter.enabled) return false;
-  const matched = evaluateNode(filter.condition, message, fullMessage);
+  const matched = evaluateNode(filter.condition, message, fullMessage, addressBookEmails);
   if (matched && !dryRun) {
     await executeActions(filter.actions, message);
   }
@@ -217,6 +240,12 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
   const fullCache = new Map();
 
   const anyNeedsFull = enabledFilters.some(f => conditionNeedsFullMessage(f.condition));
+  const anyNeedsAddressBook = enabledFilters.some(f => conditionNeedsAddressBook(f.condition));
+
+  const abFetchPromise = anyNeedsAddressBook
+    ? fetchAddressBookEmails().catch(err => { console.error("Polimath Filters: address book fetch failed", err); return null; })
+    : Promise.resolve(null);
+
   if (anyNeedsFull) {
     const BATCH = 10;
     for (let i = 0; i < allMessages.length; i += BATCH) {
@@ -231,6 +260,8 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
     }
   }
 
+  const addressBookEmails = await abFetchPromise;
+
   let matched = 0;
   const consumed = new Set();
   const hits = dryRun ? [] : null;
@@ -240,7 +271,7 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
     const fullMessage = anyNeedsFull ? (fullCache.get(message.id) || null) : null;
 
     for (const filter of enabledFilters) {
-      const hit = await runFilter(filter, message, fullMessage, dryRun);
+      const hit = await runFilter(filter, message, fullMessage, dryRun, addressBookEmails);
       if (hit) {
         matched++;
         if (hits) hits.push({ from: message.author || "", subject: message.subject || "" });

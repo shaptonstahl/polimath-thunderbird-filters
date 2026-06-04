@@ -295,15 +295,18 @@ function renderAccountsSection() {
 // ── Condition tree rendering ──────────────────────────────────────────────
 
 const FIELDS = [
-  { value: "subject",    label: "Subject" },
-  { value: "from",       label: "From" },
-  { value: "from-name",  label: "From name" },
-  { value: "to",         label: "To" },
-  { value: "cc",         label: "CC" },
-  { value: "bcc",        label: "BCC" },
-  { value: "body",       label: "Body" },
-  { value: "attachment", label: "Has attachment" },
+  { value: "subject",         label: "Subject" },
+  { value: "from",            label: "From" },
+  { value: "from-name",       label: "From name" },
+  { value: "to",              label: "To" },
+  { value: "cc",              label: "CC" },
+  { value: "bcc",             label: "BCC" },
+  { value: "body",            label: "Body" },
+  { value: "attachment",      label: "Has attachment" },
+  { value: "in-address-book", label: "Sender in address book" },
 ];
+
+const BOOLEAN_FIELDS = new Set(["attachment", "in-address-book"]);
 
 const OPERATORS = [
   { value: "contains",     label: "contains" },
@@ -511,16 +514,19 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
     }
     fieldSel.addEventListener("change", () => {
       node.field = fieldSel.value;
-      if (node.field === "attachment") {
+      if (BOOLEAN_FIELDS.has(node.field)) {
         node.operator = "is";
         node.value = "true";
       }
       renderConditionTree();
     });
 
-    if (node.field === "attachment") {
+    if (BOOLEAN_FIELDS.has(node.field)) {
+      const pairs = node.field === "attachment"
+        ? [["true", "yes"], ["false", "no"]]
+        : [["true", "in address book"], ["false", "not in address book"]];
       const valSel = document.createElement("select");
-      [["true", "yes"], ["false", "no"]].forEach(([v, l]) => {
+      pairs.forEach(([v, l]) => {
         const opt = document.createElement("option");
         opt.value = v; opt.textContent = l;
         if (v === node.value) opt.selected = true;

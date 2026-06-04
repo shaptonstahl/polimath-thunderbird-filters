@@ -23,6 +23,17 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
   );
 
   const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));
+  const needsAddressBook = activeFilters.some(f => conditionNeedsAddressBook(f.condition));
+
+  let addressBookEmails = null;
+  if (needsAddressBook) {
+    try {
+      addressBookEmails = await fetchAddressBookEmails();
+    } catch (err) {
+      console.error("Polimath Filters: address book fetch failed", err);
+    }
+  }
+
   for (const message of messageList.messages) {
     let fullMessage = null;
     if (needsFull) {
@@ -35,7 +46,7 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
 
     for (const filter of activeFilters) {
       try {
-        const matched = await runFilter(filter, message, fullMessage);
+        const matched = await runFilter(filter, message, fullMessage, false, addressBookEmails);
         if (matched) break; // first-match semantics for incoming mail
       } catch (err) {
         console.error("Polimath Filters: filter error", filter.name, err);

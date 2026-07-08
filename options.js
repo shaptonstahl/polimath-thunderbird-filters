@@ -611,6 +611,7 @@ const ACTION_TYPES = [
   { value: "move",       label: "Move to folder" },
   { value: "mark-read",  label: "Mark as read" },
   { value: "mark-unread",label: "Mark as unread" },
+  { value: "add-star",   label: "Add star" },
   { value: "add-tag",    label: "Add tag" },
   { value: "remove-tag", label: "Remove tag" },
   { value: "mark-junk",  label: "Mark as junk" },

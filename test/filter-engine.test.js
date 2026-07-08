@@ -428,6 +428,15 @@ describe('action execution', () => {
     assert.equal(ctx.calls[0].props.read, false);
   });
 
+  it('add-star calls update with { flagged: true }', async () => {
+    const ctx = makeContext([msg]);
+    await ctx.runFilter(mkFilter([{ type: 'add-star' }]), msg, null);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
+    assert.equal(ctx.calls[0].id, 99);
+    assert.equal(ctx.calls[0].props.flagged, true);
+  });
+
   it('mark-junk calls update with { junk: true }', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-junk' }]), msg, null);

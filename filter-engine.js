@@ -188,6 +188,9 @@ async function executeAction(action, message) {
     case "mark-unread":
       await messenger.messages.update(id, { read: false });
       break;
+    case "add-star":
+      await messenger.messages.update(id, { flagged: true });
+      break;
     case "add-tag": {
       const current = await messenger.messages.get(id);
       const tags = current.tags || [];

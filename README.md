@@ -8,7 +8,9 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Regular expression matching** — full ECMAScript (JavaScript) regex syntax
 - **Case-sensitivity toggle** — per-condition, defaults to case-insensitive
 - **Nine condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment, Sender in address book
-- **Seven actions** — Move, Mark read/unread, Add/remove tag, Mark as junk, Delete
+- **Unicode confusable detection** — detect homoglyph/lookalike characters or match strings that are visually similar (e.g. Cyrillic "а" vs Latin "a")
+- **Eight actions** — Move, Mark read/unread, Add star, Add/remove tag, Mark as junk, Delete
+- **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
 - **Automatic filtering** — runs on new incoming mail
 - **Manual run** — apply any filter (or all filters) to an existing folder
 - **Dry run** — preview how many messages a filter would affect without changing anything
@@ -95,6 +97,8 @@ AND
 | starts with | Prefix match |
 | ends with | Suffix match |
 | matches regex | ECMAScript regular expression — see [Regex](#regex) |
+| has confusable character | True if the field contains any non-ASCII Unicode character that looks like an ASCII character (e.g. Cyrillic "а" → Latin "a"). No value input needed. |
+| confusable with | True if the field, after replacing lookalike characters with their ASCII equivalents (skeletonization), contains the given value. Useful for catching homoglyph-based phishing (e.g. "pаypal" with Cyrillic "а" matches "paypal"). |
 
 **Aa toggle** — Each condition has a small **Aa** button. When grey (default) the match is case-insensitive. When blue it is case-sensitive.
 
@@ -105,6 +109,7 @@ AND
 | Move to folder | Pick any folder from the dropdown |
 | Mark as read | Sets the read flag |
 | Mark as unread | Clears the read flag |
+| Add star | Flags the message with a star |
 | Add tag | Select a tag from your Thunderbird tag list |
 | Remove tag | Select a tag to remove |
 | Mark as junk | Moves to Junk if Thunderbird is configured to do so |
@@ -117,6 +122,13 @@ Multiple actions can be stacked on a single filter and execute in order.
 By default a filter runs on mail from any account. To limit a filter to specific accounts, check the accounts you want under the filter name in the editor. When at least one account is checked, the filter only runs on mail arriving in (or being scanned from) a matching account.
 
 This is useful when you have multiple email addresses with different naming conventions or different tagging schemes.
+
+### Import and export
+
+The filter list toolbar has **Export…** and **Import…** buttons for sharing filters between Thunderbird profiles or creating backups.
+
+- **Export** opens a modal where you select which filters to include. The selected filters are saved as a `.json` file.
+- **Import** reads a previously exported `.json` file and shows each filter with a checkbox. If an imported filter has the same name as an existing one, a **Compare** button lets you view both side-by-side and rename either before importing.
 
 ### Running filters manually
 
@@ -179,7 +191,8 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
   "type": "condition",
   "field": "subject" | "from" | "from-name" | "to" | "cc" | "bcc" | "body" | "attachment" | "in-address-book",
   "operator": "contains" | "not-contains" | "is" | "is-not" |
-               "starts-with" | "ends-with" | "regex",
+               "starts-with" | "ends-with" | "regex" |
+               "has-confusable" | "confusable-with",
   "value": "string",
   "caseSensitive": false   // omit or false = case-insensitive
 }
@@ -191,13 +204,14 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
 { "type": "move",        "folderId": "...", "folderName": "..." }
 { "type": "mark-read"   }
 { "type": "mark-unread" }
+{ "type": "add-star"    }
 { "type": "add-tag",    "tag": "$label1" }
 { "type": "remove-tag", "tag": "$label1" }
 { "type": "mark-junk"   }
 { "type": "delete"      }
 ```
 
-You can export or import filters by opening the browser console (`Ctrl+Shift+J` in Thunderbird's developer tools) and reading/writing `browser.storage.local`.
+Use the **Export** and **Import** buttons in the options page to transfer filters between profiles. Filters are exported as a JSON array in the same format shown above.
 
 ## Development
 
@@ -218,13 +232,17 @@ node --test test/filter-engine.test.js
 ### Project structure
 
 ```
-manifest.json        Extension manifest (Manifest V2)
-filter-engine.js     Pure evaluation and action logic; loaded in both contexts
-background.js        New-mail event listener
-options.html         Options page markup
-options.js           Options page: filter list, condition tree editor, run-now
-options.css          Styles
-icons/icon.svg       Extension icon
+manifest.json            Extension manifest (Manifest V2)
+confusables-data.js      Generated — Unicode TR39 confusable character mappings
+filter-engine.js         Pure evaluation and action logic; loaded in both contexts
+background.js            New-mail event listener
+options.html             Options page markup
+options.js               Options page: filter list, condition tree editor, run-now
+options.css              Styles
+icons/icon.svg           Extension icon
+scripts/
+  build-confusables.js   Fetches confusables.txt and regenerates confusables-data.js
 test/
-  filter-engine.test.js   Node.js unit tests for filter-engine.js
+  filter-engine.test.js  Node.js unit tests for filter-engine.js
+docs/decisions/          Architecture Decision Records (ADRs)
 ```

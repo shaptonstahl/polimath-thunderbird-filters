@@ -28,12 +28,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Read version from manifest.json
         id: version
         run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
 
+      - name: Check if version changed
+        id: changed
+        run: |
+          prev=$(git show HEAD~1:manifest.json 2>/dev/null | jq -r .version 2>/dev/null || echo "")
+          if [ "$prev" = "$CURR" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true"  >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          CURR: ${{ steps.version.outputs.version }}
+
       - name: Build .xpi
+        if: steps.changed.outputs.changed == 'true'
         run: |
           zip -r "polimath-filters-${{ steps.version.outputs.version }}.xpi" \
             manifest.json \
@@ -45,18 +60,15 @@ jobs:
             icons/ \
             LICENSE
 
-      # Always upload the .xpi as a workflow artifact so it is downloadable
-      # from the Actions tab regardless of whether a release is created.
       - name: Upload .xpi as workflow artifact
+        if: steps.changed.outputs.changed == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: polimath-filters-${{ steps.version.outputs.version }}
           path: polimath-filters-${{ steps.version.outputs.version }}.xpi
 
-      # Create a GitHub Release only when this version has not been released
-      # before.  If the tag already exists the step is silently skipped,
-      # which lets non-version-bump merges land on main without error.
       - name: Check whether this version already has a release
+        if: steps.changed.outputs.changed == 'true'
         id: check
         run: |
           if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
@@ -68,7 +80,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub release
-        if: steps.check.outputs.exists == 'false'
+        if: steps.changed.outputs.changed == 'true' && steps.check.outputs.exists == 'false'
         run: |
           gh release create "v${{ steps.version.outputs.version }}" \
             --title "v${{ steps.version.outputs.version }}" \

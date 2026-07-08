@@ -58,3 +58,4 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - `messenger` is the global Thunderbird WebExtensions API — treat it like `browser` in Firefox extensions.
 - Async/await throughout. No callbacks, no `.then()` chains.
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
+- Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix.

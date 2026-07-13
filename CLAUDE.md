@@ -59,3 +59,4 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - Async/await throughout. No callbacks, no `.then()` chains.
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
 - Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix.
+- No need to build the xpi manually - it's part of a git action

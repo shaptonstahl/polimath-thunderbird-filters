@@ -9,6 +9,7 @@ A Thunderbird MailExtension (Manifest V2) that replaces the built-in filter edit
 ```sh
 npm test                  # Run the filter-engine test suite (Node 18+)
 npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate confusables-data.js
+./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ```
 
 `confusables-data.js` is a committed generated file. Regenerate it when updating the Unicode data version. The XPI build step runs `build:confusables` automatically before packaging.
@@ -21,7 +22,8 @@ filter-engine.js     Pure evaluation logic — no DOM, no Thunderbird API calls 
 background.js        Listens for new mail, loads filters from storage, calls filter-engine
 options.js           Options page UI — filter list, condition tree editor, run-on-folder modal
 scripts/
-  build-confusables.js  Fetches confusables.txt from unicode.org, writes confusables-data.js
+  build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
+  export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
 ```
 
 `confusables-data.js` is loaded before `filter-engine.js` in both the background page and the options page. `filter-engine.js` accesses `CONFUSABLES_MAP` as a direct global; if the file is absent (e.g., in test contexts that don't load it), both confusables operators degrade gracefully.

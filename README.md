@@ -11,6 +11,7 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Unicode confusable detection** — detect homoglyph/lookalike characters or match strings that are visually similar (e.g. Cyrillic "а" vs Latin "a")
 - **Eight actions** — Move, Mark read/unread, Add star, Add/remove tag, Mark as junk, Delete
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
+- **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
 - **Automatic filtering** — runs on new incoming mail
 - **Manual run** — apply any filter (or all filters) to an existing folder
 - **Dry run** — preview how many messages a filter would affect without changing anything
@@ -130,6 +131,16 @@ The filter list toolbar has **Export…** and **Import…** buttons for sharing 
 - **Export** opens a modal where you select which filters to include. The selected filters are saved as a `.json` file.
 - **Import** reads a previously exported `.json` file and shows each filter with a checkbox. If an imported filter has the same name as an existing one, a **Compare** button lets you view both side-by-side and rename either before importing.
 
+**Offline export** — when Thunderbird isn't running, use the bundled shell script to extract filters directly from the profile:
+
+```sh
+scripts/export-stored-filters.sh -l                # list saved filters
+scripts/export-stored-filters.sh -p ~/.thunderbird/abc123.default  # export from a specific profile
+scripts/export-stored-filters.sh -o my-filters.json # export to a named file
+```
+
+The output file can be imported back via the UI's Import button. Requires only Python 3 (standard library; no extra packages needed).
+
 ### Running filters manually
 
 Every filter row has a **▶** (run) button. The top of the filter list also has **▶ Run all on folder…**. Both open a folder picker.
@@ -241,7 +252,8 @@ options.js               Options page: filter list, condition tree editor, run-n
 options.css              Styles
 icons/icon.svg           Extension icon
 scripts/
-  build-confusables.js   Fetches confusables.txt and regenerates confusables-data.js
+  build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
+  export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
 test/
   filter-engine.test.js  Node.js unit tests for filter-engine.js
 docs/decisions/          Architecture Decision Records (ADRs)

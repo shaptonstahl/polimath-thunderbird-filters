@@ -10,9 +10,11 @@ A Thunderbird MailExtension (Manifest V2) that replaces the built-in filter edit
 npm test                  # Run the filter-engine test suite (Node 18+)
 npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate confusables-data.js
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
+./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
+shellcheck scripts/*.sh   # Lint shell scripts (CI runs this on every push and PR)
 ```
 
-`confusables-data.js` is a committed generated file. Regenerate it when updating the Unicode data version. The XPI build step runs `build:confusables` automatically before packaging.
+`confusables-data.js` is a committed generated file. Regenerate it and commit the result when updating the Unicode data version. The XPI build does **not** regenerate it — CI packages the committed copy as-is, so a stale commit ships stale data.
 
 ## Architecture
 
@@ -24,6 +26,7 @@ options.js           Options page UI — filter list, condition tree editor, run
 scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
   export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
+  verify-xpi.sh              Checks a built .xpi against every path manifest.json and options.html reference
 ```
 
 `confusables-data.js` is loaded before `filter-engine.js` in both the background page and the options page. `filter-engine.js` accesses `CONFUSABLES_MAP` as a direct global; if the file is absent (e.g., in test contexts that don't load it), both confusables operators degrade gracefully.
@@ -62,3 +65,6 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
 - Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix.
 - No need to build the xpi manually - it's part of a git action
+- Adding a new file that the extension loads at runtime? Add it to the `zip` step in `.github/workflows/ci.yml`. The packaging list is a hand-maintained allowlist, not a glob. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
+- Shell scripts must pass `shellcheck` on its **default** profile — that is the CI gate. House style is `[[ ]]` tests, bare `"$var"` (no `${braces}` except for `:-` defaults), 4-space indent. Do not adopt `-o all` wholesale: SC2250 would require braces everywhere and conflicts with the existing scripts.
+- AMO's validator flags the Thunderbird-only permissions (`messagesRead`, `messagesMove`, `messagesDelete`, `messagesUpdate`, `accountsRead`, `addressBooks`) as invalid. These are warnings from the Firefox schema and are expected — do not remove them.

@@ -11,6 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Runs before the Node setup — it needs neither Node nor the toolchain.
+      # Fails loudly if shellcheck is missing rather than skipping the lint,
+      # so a runner image change can't silently drop this gate.
+      - name: Lint shell scripts
+        run: |
+          command -v shellcheck >/dev/null || {
+            echo "error: shellcheck not found on runner" >&2
+            exit 1
+          }
+          shellcheck --version
+          shellcheck scripts/*.sh
+
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -52,6 +64,7 @@ jobs:
         run: |
           zip -r "polimath-filters-${{ steps.version.outputs.version }}.xpi" \
             manifest.json \
+            confusables-data.js \
             filter-engine.js \
             background.js \
             options.html \
@@ -59,6 +72,10 @@ jobs:
             options.css \
             icons/ \
             LICENSE
+
+      - name: Verify .xpi contains every referenced file
+        if: steps.changed.outputs.changed == 'true'
+        run: ./scripts/verify-xpi.sh "polimath-filters-${{ steps.version.outputs.version }}.xpi"
 
       - name: Upload .xpi as workflow artifact
         if: steps.changed.outputs.changed == 'true'

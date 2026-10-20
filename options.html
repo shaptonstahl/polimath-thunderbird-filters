@@ -47,8 +47,9 @@
 
       <section class="editor-section">
         <h3>Accounts</h3>
-        <p class="hint">Apply to incoming mail from these accounts. Leave all unchecked to apply to all accounts.</p>
+        <p class="hint">Apply to incoming mail from the checked accounts only.</p>
         <div id="accounts-list"></div>
+        <button id="btn-accounts-all" class="btn-secondary">Apply to all accounts</button>
       </section>
 
       <section class="editor-section">
@@ -81,14 +82,31 @@
   <div id="modal">
     <h2 id="modal-title">Choose a folder</h2>
     <p id="modal-desc"></p>
+    <div id="run-folder-label" class="run-folder-label hidden"></div>
     <select id="modal-folder-select" size="8"></select>
     <div id="modal-progress" class="hidden">
       <div id="modal-progress-bar"><div id="modal-progress-fill"></div></div>
       <p id="modal-progress-text"></p>
     </div>
-    <div id="modal-result" class="hidden"></div>
+    <div id="run-result" class="hidden">
+      <div id="run-result-summary"></div>
+      <div id="run-table-scroll">
+        <table id="run-table">
+          <colgroup id="run-table-cols"></colgroup>
+          <thead>
+            <tr>
+              <th><span class="run-th-label">Subject</span><span class="run-col-resizer" data-col="0"></span></th>
+              <th><span class="run-th-label">From</span><span class="run-col-resizer" data-col="1"></span></th>
+              <th><span class="run-th-label">To</span><span class="run-col-resizer" data-col="2"></span></th>
+              <th><span class="run-th-label">Rules Applied</span><span class="run-col-resizer" data-col="3"></span></th>
+            </tr>
+          </thead>
+          <tbody id="run-table-body"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="modal-actions">
-      <button id="modal-dry-run" class="btn-secondary hidden">Dry Run</button>
+      <button id="modal-dry-run" class="btn-secondary">Dry Run</button>
       <button id="modal-confirm" class="btn-primary">Run</button>
       <button id="modal-cancel" class="btn-ghost">Cancel</button>
     </div>

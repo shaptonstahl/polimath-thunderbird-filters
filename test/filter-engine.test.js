@@ -598,15 +598,31 @@ describe('runFiltersOnFolder', () => {
     assert.equal(result.hits.length, 2);
     assert.equal(result.hits[0].from, 'a@biz.com');
     assert.equal(result.hits[0].subject, 'Invoice Q1');
+    assert.equal(result.hits[0].to, '');
+    assert.deepEqual(Array.from(result.hits[0].rules), ['f1']);
     assert.equal(result.hits[1].from, 'c@biz.com');
     assert.equal(result.hits[1].subject, 'Invoice Q2');
   });
 
-  it('non-dry-run returns null hits', async () => {
+  it('non-dry-run returns hits array too', async () => {
     const ctx = makeContext(msgs);
     const result = await ctx.runFiltersOnFolder(
       [mkFilter('f1', invoiceCond, [{ type: 'mark-read' }])], 'inbox', null, false);
-    assert.equal(result.hits, null);
+    assert.equal(result.hits.length, 2);
+    assert.equal(result.hits[0].subject, 'Invoice Q1');
+  });
+
+  it('records recipients and every matching rule', async () => {
+    const msgs2 = [
+      { id: 1, subject: 'Invoice Q1', author: 'a@biz.com', recipients: ['x@y.com'], hasAttachment: false },
+    ];
+    const ctx = makeContext(msgs2);
+    const f1 = mkFilter('f1', invoiceCond, []);
+    const f2 = mkFilter('f2', allCond, []);
+    const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
+    assert.equal(result.hits.length, 1);
+    assert.equal(result.hits[0].to, 'x@y.com');
+    assert.deepEqual(Array.from(result.hits[0].rules), ['f1', 'f2']);
   });
 
   it('messages consumed by a move are skipped by later filters', async () => {
@@ -633,9 +649,8 @@ describe('runFiltersOnFolder', () => {
 
   it('dry run does not consume messages, so later filters see them', async () => {
     const ctx = makeContext(msgs);
-    // In dry-run nothing is consumed, but first-match still stops at the first
-    // matching filter per message.  f1 (invoice) matches msgs 1 and 3; f2 (all)
-    // matches msg 2 (the only one f1 did not claim).  Total: 3.
+    // In dry-run no actions execute, and every matching filter is reported.
+    // f1 (invoice) matches msgs 1 and 3; f2 (all) matches every message.
     const f1 = mkFilter('f1', invoiceCond, [{ type: 'move', folderId: 'archive' }]);
     const f2 = mkFilter('f2', allCond,     [{ type: 'mark-read' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);

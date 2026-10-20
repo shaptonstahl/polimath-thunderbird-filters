@@ -120,7 +120,7 @@ Multiple actions can be stacked on a single filter and execute in order.
 
 ### Account scoping
 
-By default a filter runs on mail from any account. To limit a filter to specific accounts, check the accounts you want under the filter name in the editor. When at least one account is checked, the filter only runs on mail arriving in (or being scanned from) a matching account.
+A filter only runs on mail from the accounts you check in the editor. Leave every account unchecked and the filter won't run at all. Use the **Apply to all accounts** button to check every account at once.
 
 This is useful when you have multiple email addresses with different naming conventions or different tagging schemes.
 
@@ -145,10 +145,12 @@ The output file can be imported back via the UI's Import button. Requires only P
 
 Every filter row has a **▶** (run) button. The top of the filter list also has **▶ Run all on folder…**. Both open a folder picker.
 
-- **Run** — evaluates conditions and executes all matched actions.
-- **Dry Run** *(single filter only)* — evaluates conditions but does not execute any actions. Reports how many messages would be affected.
+- **Run** — evaluates conditions and executes the actions of the first matching rule per message.
+- **Dry Run** — evaluates conditions without executing anything, so you can preview what would match.
 
-**Consumed-message behaviour** — when running all filters on a folder, a message that is moved or deleted by an earlier filter is removed from the pool. Later filters will not see it, which mirrors the behaviour of Thunderbird's built-in filter runner.
+After running, the window shows the folder you scanned and a table of every message that matched any rule, with columns **Subject**, **From**, **To**, and **Rules Applied**. Drag the column borders to resize them; the widths are remembered between sessions. The table scrolls both vertically and horizontally.
+
+**First-match behaviour** — a message can match more than one rule, and the **Rules Applied** column lists them all. On a real **Run**, only the first matching rule's actions execute, mirroring Thunderbird's built-in filter runner (and incoming-mail processing).
 
 ## Regex
 
@@ -182,7 +184,7 @@ Filters are stored in `browser.storage.local` under the key `filters` as a JSON 
   "id": "550e8400-e29b-41d4-a716-446655440000",   // UUID
   "name": "Archive invoices",
   "enabled": true,
-  "accountIds": [],                                // [] or omitted = all accounts; non-empty = restrict to listed account IDs
+  "accountIds": [],                                // account IDs the filter applies to; empty = no accounts
   "condition": { /* ConditionNode — see below */ },
   "actions": [ /* Action[] — see below */ ]
 }

@@ -15,6 +15,7 @@ let dragSrcIdx = null;     // index of filter being dragged
 let importCandidates = []; // filters parsed from an import file, pending selection
 let compareIdx = null;     // index into importCandidates currently open in compare modal
 let compareExistingFilter = null; // reference into allFilters for current compare
+let savedSnapshot = null;     // JSON of editingFilter at last open/save, for dirty tracking
 
 // ── Storage helpers ───────────────────────────────────────────────────────
 
@@ -214,6 +215,8 @@ function openEditor(idx) {
   renderConditionTree();
   renderActionsList();
   renderFilterList();
+  savedSnapshot = currentFilterState();
+  updateSaveButton();
 }
 
 function openNewEditor() {
@@ -234,6 +237,8 @@ function openNewEditor() {
   renderConditionTree();
   renderActionsList();
   renderFilterList();
+  savedSnapshot = currentFilterState();
+  updateSaveButton();
 }
 
 function closeEditor() {
@@ -251,6 +256,22 @@ function hasLeafCondition(node) {
   return false;
 }
 
+function currentFilterState() {
+  return JSON.stringify({
+    ...editingFilter,
+    name: document.getElementById("filter-name").value,
+  });
+}
+
+function updateSaveButton() {
+  const btn = document.getElementById("btn-save");
+  if (!editingFilter) {
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = currentFilterState() === savedSnapshot;
+}
+
 function saveEditor() {
   editingFilter.name = document.getElementById("filter-name").value.trim() || "Unnamed";
   if (!hasLeafCondition(editingFilter.condition)) {
@@ -266,6 +287,8 @@ function saveEditor() {
   saveFilters();
   renderFilterList();
   document.getElementById("editor-title").textContent = "Edit Filter";
+  savedSnapshot = currentFilterState();
+  updateSaveButton();
 }
 
 // ── Account scope rendering ───────────────────────────────────────────────
@@ -496,14 +519,7 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
 
     const childContainer = document.createElement("div");
     childContainer.className = "node-children";
-    const childEl = buildNodeEl(
-      node.child,
-      null,
-      (replacement) => {
-        node.child = replacement;
-        renderConditionTree();
-      }
-    );
+    const childEl = buildNodeEl(node.child, null, null);
     childContainer.appendChild(childEl);
     wrapper.appendChild(childContainer);
 
@@ -710,6 +726,55 @@ function renderActionDetail(action, container) {
 let runModalFilters = [];
 let runModalIsSingle = false;
 
+const RUN_COLUMNS = ["Subject", "From", "To", "Rules Applied"];
+const DEFAULT_RUN_COL_WIDTHS = [420, 220, 220, 260];
+let runColWidths = [...DEFAULT_RUN_COL_WIDTHS];
+
+async function loadRunColWidths() {
+  try {
+    const data = await messenger.storage.local.get("runColWidths");
+    if (Array.isArray(data.runColWidths) && data.runColWidths.length === RUN_COLUMNS.length) {
+      runColWidths = data.runColWidths.map(Number);
+    }
+  } catch {}
+}
+
+async function saveRunColWidths() {
+  await messenger.storage.local.set({ runColWidths });
+}
+
+function initRunColumnResizers() {
+  document.querySelectorAll(".run-col-resizer").forEach(handle => {
+    handle.addEventListener("mousedown", e => {
+      e.preventDefault();
+      const colIdx = Number(handle.dataset.col);
+      const table = document.getElementById("run-table");
+      const cols = table.querySelectorAll("col");
+      if (colIdx < 0 || colIdx >= cols.length) return;
+      const startX = e.clientX;
+      const startWidth = runColWidths[colIdx];
+
+      const onMove = ev => {
+        const width = Math.max(60, startWidth + (ev.clientX - startX));
+        runColWidths[colIdx] = width;
+        cols[colIdx].style.width = width + "px";
+        table.style.width = runColWidths.reduce((a, b) => a + b, 0) + "px";
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        saveRunColWidths();
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  });
+}
+
+function closeRunModal() {
+  document.getElementById("modal-overlay").classList.add("hidden");
+}
+
 function openRunModal(filters) {
   runModalFilters = filters;
   runModalIsSingle = filters.length === 1;
@@ -717,8 +782,8 @@ function openRunModal(filters) {
   const title = document.getElementById("modal-title");
   const folderSel = document.getElementById("modal-folder-select");
   const progress = document.getElementById("modal-progress");
-  const result = document.getElementById("modal-result");
-  const dryRunBtn = document.getElementById("modal-dry-run");
+  const runResult = document.getElementById("run-result");
+  const folderLabel = document.getElementById("run-folder-label");
   const confirmBtn = document.getElementById("modal-confirm");
 
   title.textContent = runModalIsSingle
@@ -726,25 +791,73 @@ function openRunModal(filters) {
     : "Run all filters on folder…";
 
   populateFolderSelect(folderSel);
+  folderSel.classList.remove("hidden");
+  folderLabel.classList.add("hidden");
   progress.classList.add("hidden");
-  result.classList.add("hidden");
+  runResult.classList.add("hidden");
   confirmBtn.disabled = false;
   confirmBtn.textContent = "Run";
-  confirmBtn.onclick = null;
-  dryRunBtn.classList.toggle("hidden", !runModalIsSingle);
+  confirmBtn.onclick = () => executeModalRun(false);
+  document.getElementById("modal-dry-run").disabled = false;
 
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
-document.getElementById("modal-cancel").addEventListener("click", () => {
-  document.getElementById("modal-overlay").classList.add("hidden");
-});
+document.getElementById("modal-cancel").addEventListener("click", closeRunModal);
 
 document.getElementById("modal-overlay").addEventListener("click", e => {
   if (e.target === document.getElementById("modal-overlay")) {
-    document.getElementById("modal-overlay").classList.add("hidden");
+    closeRunModal();
   }
 });
+
+function renderRunResults(outcome, dryRun) {
+  const summary = document.getElementById("run-result-summary");
+  const table = document.getElementById("run-table");
+  const colgroup = document.getElementById("run-table-cols");
+  const tbody = document.getElementById("run-table-body");
+
+  summary.textContent = dryRun
+    ? `Dry run: ${outcome.matched} of ${outcome.total} messages match.`
+    : `Applied ${outcome.matched} of ${outcome.total} messages (first matching rule per message).`;
+
+  colgroup.innerHTML = "";
+  runColWidths.forEach(w => {
+    const col = document.createElement("col");
+    col.style.width = w + "px";
+    colgroup.appendChild(col);
+  });
+  table.style.width = runColWidths.reduce((a, b) => a + b, 0) + "px";
+
+  tbody.innerHTML = "";
+  const hits = outcome.hits || [];
+  if (hits.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = RUN_COLUMNS.length;
+    td.textContent = "No messages matched.";
+    td.style.color = "var(--text-muted)";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const h of hits) {
+    const tr = document.createElement("tr");
+    const values = [
+      h.subject || "(no subject)",
+      h.from || "(no sender)",
+      h.to || "",
+      (h.rules || []).join(", "),
+    ];
+    values.forEach(v => {
+      const td = document.createElement("td");
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+}
 
 async function executeModalRun(dryRun) {
   const folderSel = document.getElementById("modal-folder-select");
@@ -753,18 +866,23 @@ async function executeModalRun(dryRun) {
 
   const selectedFolder = folderList.find(f => f.id === folderId);
   const accountId = selectedFolder?.accountId || null;
+  const folderLabel = selectedFolder?.label || "";
 
   const confirmBtn = document.getElementById("modal-confirm");
   const dryRunBtn = document.getElementById("modal-dry-run");
   const progress = document.getElementById("modal-progress");
   const progressFill = document.getElementById("modal-progress-fill");
   const progressText = document.getElementById("modal-progress-text");
-  const result = document.getElementById("modal-result");
+  const runResult = document.getElementById("run-result");
+  const runFolderLabel = document.getElementById("run-folder-label");
 
   confirmBtn.disabled = true;
   dryRunBtn.disabled = true;
+  folderSel.classList.add("hidden");
+  runFolderLabel.textContent = `Folder: ${folderLabel}`;
+  runFolderLabel.classList.remove("hidden");
   progress.classList.remove("hidden");
-  result.classList.add("hidden");
+  runResult.classList.add("hidden");
   progressFill.style.width = "0%";
   progressText.textContent = "Loading messages…";
 
@@ -783,43 +901,14 @@ async function executeModalRun(dryRun) {
       accountId
     );
 
-    progressFill.style.width = "100%";
-    progressText.textContent = "Done.";
-    result.innerHTML = "";
-    if (dryRun) {
-      const summary = document.createElement("p");
-      summary.textContent = `Dry run: ${outcome.matched} of ${outcome.total} messages would be affected.`;
-      result.appendChild(summary);
-      if (outcome.hits && outcome.hits.length > 0) {
-        const ul = document.createElement("ul");
-        ul.className = "dry-run-hits";
-        for (const h of outcome.hits) {
-          const li = document.createElement("li");
-          const fromSpan = document.createElement("span");
-          fromSpan.className = "hit-from";
-          fromSpan.textContent = h.from || "(no sender)";
-          const subjSpan = document.createElement("span");
-          subjSpan.className = "hit-subject";
-          subjSpan.textContent = h.subject || "(no subject)";
-          li.appendChild(fromSpan);
-          li.appendChild(subjSpan);
-          ul.appendChild(li);
-        }
-        result.appendChild(ul);
-      }
-    } else {
-      result.textContent = `Matched ${outcome.matched} of ${outcome.total} messages.`;
-    }
-    result.classList.remove("hidden");
+    renderRunResults(outcome, dryRun);
+    progress.classList.add("hidden");
+    runResult.classList.remove("hidden");
 
     confirmBtn.textContent = "Close";
     confirmBtn.disabled = false;
+    confirmBtn.onclick = closeRunModal;
     dryRunBtn.disabled = false;
-    confirmBtn.onclick = () => {
-      document.getElementById("modal-overlay").classList.add("hidden");
-      confirmBtn.textContent = "Run";
-      confirmBtn.onclick = null;
-    };
   } catch (err) {
     progressText.textContent = "Error: " + err.message;
     confirmBtn.disabled = false;
@@ -827,7 +916,6 @@ async function executeModalRun(dryRun) {
   }
 }
 
-document.getElementById("modal-confirm").addEventListener("click", () => executeModalRun(false));
 document.getElementById("modal-dry-run").addEventListener("click", () => executeModalRun(true));
 
 // ── Export ────────────────────────────────────────────────────────────────
@@ -1054,9 +1142,18 @@ document.getElementById("btn-cancel").addEventListener("click", () => {
   closeEditor();
 });
 
+document.getElementById("editor-panel").addEventListener("input", updateSaveButton);
+document.getElementById("editor-panel").addEventListener("change", updateSaveButton);
+document.getElementById("editor-panel").addEventListener("click", updateSaveButton);
+
 document.getElementById("btn-add-action").addEventListener("click", () => {
   editingFilter.actions.push({ type: "mark-read" });
   renderActionsList();
+});
+
+document.getElementById("btn-accounts-all").addEventListener("click", () => {
+  editingFilter.accountIds = accountList.map(a => a.id);
+  renderAccountsSection();
 });
 
 document.getElementById("btn-export").addEventListener("click", openExportModal);
@@ -1136,6 +1233,7 @@ document.getElementById("compare-done").addEventListener("click", () => {
 // ── Init ──────────────────────────────────────────────────────────────────
 
 (async () => {
-  await Promise.all([loadFilters(), buildFolderList(), loadTagList()]);
+  initRunColumnResizers();
+  await Promise.all([loadFilters(), buildFolderList(), loadTagList(), loadRunColWidths()]);
   renderFilterList();
 })();

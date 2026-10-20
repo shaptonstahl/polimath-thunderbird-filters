@@ -256,21 +256,22 @@ async function fetchAllMessages(folderId) {
 
 /**
  * Run a set of filters on all messages in a folder.
- * Uses message-centric first-match semantics (same as incoming-mail processing):
  *   - Fetch all headers once.
  *   - Pre-fetch full content in parallel batches when any filter needs it.
- *   - For each message, apply filters in order and stop at the first match.
- *   - Remove consumed (moved/deleted) messages so later messages don't see them.
+ *   - For each message, evaluate every enabled filter and report every match.
+ *   - When dryRun is false, execute only the first matching filter's actions
+ *     (first-match semantics, same as incoming-mail processing).
  *
- * Returns { matched: number, total: number, hits: array|null }.
- * When dryRun is true, conditions are evaluated but actions are never executed.
+ * Returns { matched: number, total: number, hits: array }.
+ * `hits` has one entry per matched message: { subject, from, to, rules },
+ * where `rules` lists the name of every filter whose condition matched.
  * accountId, when provided, skips filters not scoped to that account.
  */
 async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null) {
   const enabledFilters = filters.filter(f =>
-    f.enabled && (!accountId || !f.accountIds?.length || f.accountIds.includes(accountId))
+    f.enabled && (!accountId || f.accountIds?.includes(accountId))
   );
-  if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: dryRun ? [] : null };
+  if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: [] };
 
   const allMessages = await fetchAllMessages(folderId);
   const total = allMessages.length;
@@ -300,22 +301,32 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
   const addressBookEmails = await abFetchPromise;
 
   let matched = 0;
-  const consumed = new Set();
-  const hits = dryRun ? [] : null;
+  const hits = [];
 
   for (const message of allMessages) {
-    if (consumed.has(message.id)) continue;
     const fullMessage = anyNeedsFull ? (fullCache.get(message.id) || null) : null;
 
+    const rules = [];
+    let firstMatch = null;
     for (const filter of enabledFilters) {
-      const hit = await runFilter(filter, message, fullMessage, dryRun, addressBookEmails);
-      if (hit) {
-        matched++;
-        if (hits) hits.push({ from: message.author || "", subject: message.subject || "" });
-        const movesOrDeletes = filter.actions.some(a => a.type === "move" || a.type === "delete");
-        if (movesOrDeletes && !dryRun) consumed.add(message.id);
-        break; // first-match: stop at the first filter that matches this message
+      if (evaluateNode(filter.condition, message, fullMessage, addressBookEmails)) {
+        rules.push(filter.name);
+        if (firstMatch === null) firstMatch = filter;
       }
+    }
+
+    if (firstMatch === null) continue;
+
+    matched++;
+    hits.push({
+      subject: message.subject || "",
+      from: message.author || "",
+      to: (message.recipients || []).join(", "),
+      rules,
+    });
+
+    if (!dryRun) {
+      await executeActions(firstMatch.actions, message);
     }
   }
 

@@ -19,7 +19,7 @@ messenger.storage.onChanged.addListener((changes, area) => {
 messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => {
   const accountId = folder.accountId;
   const activeFilters = cachedFilters.filter(f =>
-    f.enabled && (!f.accountIds?.length || f.accountIds.includes(accountId))
+    f.enabled && f.accountIds?.includes(accountId)
   );
 
   const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));

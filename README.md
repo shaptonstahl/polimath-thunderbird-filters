@@ -19,15 +19,32 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 
 ## Installation
 
-Thunderbird does not yet distribute this extension through addons.thunderbird.net, so load it as a temporary add-on:
+### From addons.thunderbird.net
 
-1. Clone or download this repository.
+The extension is [submitted to addons.thunderbird.net](https://addons.thunderbird.net/en-US/thunderbird/addon/polimath-filters/) and **awaiting review**. Once it is approved this will be the recommended route, since it brings automatic updates. Until then, use a release XPI.
+
+### From a release XPI
+
+1. Download the latest `.xpi` from the [Releases page](https://github.com/shaptonstahl/polimath-thunderbird-filters/releases).
 2. Open Thunderbird.
 3. Open **Tools → Add-on Manager** (or press `Ctrl+Shift+A`).
-4. Click the gear icon and choose **Debug Add-ons**.
-5. Click **Load Temporary Add-on…** and select `manifest.json` from the repository root.
+4. Click the gear icon and choose **Install Add-on From File…**.
+5. Select the downloaded `.xpi`.
 
-The extension stays loaded until Thunderbird is restarted. To make it permanent, package it as an XPI (`zip -r polimath-filters.xpi . -x '*.git*'`) and install from file.
+This survives a restart. It will not auto-update until the add-on is approved on addons.thunderbird.net, so check the Releases page for new versions.
+
+### As a temporary add-on
+
+For development, or to try a change without packaging it:
+
+1. Clone this repository.
+2. Open **Tools → Add-on Manager** (`Ctrl+Shift+A`).
+3. Click the gear icon and choose **Debug Add-ons**.
+4. Click **Load Temporary Add-on…** and select `manifest.json` from the repository root.
+
+The extension unloads when Thunderbird restarts.
+
+> Don't hand-roll an XPI with `zip -r polimath-filters.xpi .` — that sweeps in `test/`, `docs/`, and `.github/`, and it is easy to omit a file the manifest needs. Releases are built and verified by CI; see [Releases and packaging](#releases-and-packaging).
 
 ## Usage
 
@@ -256,7 +273,20 @@ icons/icon.svg           Extension icon
 scripts/
   build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
+  verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
 test/
   filter-engine.test.js  Node.js unit tests for filter-engine.js
 docs/decisions/          Architecture Decision Records (ADRs)
 ```
+
+### Releases and packaging
+
+Releases are built by GitHub Actions, not by hand. Pushing to `main` with a changed `version` in `manifest.json` builds the XPI, verifies it, and publishes a GitHub release tagged `v<version>`.
+
+The packaging step is an explicit list of paths in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), not a glob — **a new runtime file must be added to that list**, or it will be missing from the XPI. `scripts/verify-xpi.sh` is the guard: it collects every path referenced by `manifest.json` and by the HTML pages the manifest points at, then fails the build if any of them is absent from the archive.
+
+```sh
+scripts/verify-xpi.sh polimath-filters-1.10.1.xpi
+```
+
+CI also runs `shellcheck scripts/*.sh` on every push and pull request.

@@ -399,6 +399,143 @@ const OPERATORS = [
 // Operators that take no value input (the value field is irrelevant).
 const NO_VALUE_OPS = new Set(["has-confusable"]);
 
+// ── Help system ─────────────────────────────────────────────────────────────
+
+const FIELD_HELP = {
+  subject:          "The Subject line of the message.",
+  from:             "The sender's full author string — display name and address, e.g. \"Stephen Haptonstahl <stephen@example.com>\". To test only the name, use \"From name\".",
+  "from-name":      "Just the sender's display name — the text before the <address>. Empty if the sender has no display name.",
+  to:               "The To recipients, joined into one string. Multiple addresses are separated by \", \".",
+  cc:               "The Cc recipients, joined into one string.",
+  bcc:              "The Bcc recipients, joined into one string — only populated on messages you sent.",
+  body:             "The full message body text (plain text, and HTML converted to text).",
+  attachment:       "Whether the message has an attachment.",
+  "in-address-book":"Whether the sender's address appears in one of your address books.",
+};
+
+// Field value + realistic substring/prefix/suffix, for concrete examples in operator help.
+const FIELD_EXAMPLE = {
+  subject:     { text: "Your Amazon receipt",        needle: "receipt",     prefix: "Your",      suffix: "receipt" },
+  from:        { text: "Deals <deals@amazon.com>",   needle: "amazon",      prefix: "Deals",     suffix: "@amazon.com>" },
+  "from-name": { text: "Stephen Haptonstahl",        needle: "stephen",     prefix: "Stephen",   suffix: "Haptonstahl" },
+  to:          { text: "stephen@example.com",        needle: "example",     prefix: "stephen",   suffix: ".com" },
+  cc:          { text: "stephen@example.com",        needle: "example",     prefix: "stephen",   suffix: ".com" },
+  bcc:         { text: "stephen@example.com",        needle: "example",     prefix: "stephen",   suffix: ".com" },
+  body:        { text: "click here to unsubscribe",  needle: "unsubscribe", prefix: "click",     suffix: "unsubscribe" },
+};
+
+function fieldValuePhrase(field) {
+  switch (field) {
+    case "subject":  return "the Subject line";
+    case "from":     return "the sender string (name + address)";
+    case "from-name":return "the sender's display name";
+    case "to":       return "the To list";
+    case "cc":       return "the Cc list";
+    case "bcc":      return "the Bcc list";
+    case "body":     return "the body text";
+    default:         return "the field";
+  }
+}
+
+function operatorHelp(field, operator) {
+  const what = fieldValuePhrase(field);
+  const ex = FIELD_EXAMPLE[field];
+  const isList = field === "to" || field === "cc" || field === "bcc";
+  const isNameAddr = field === "from";
+  const isBody = field === "body";
+  switch (operator) {
+    case "contains":
+      return `True if ${what} contains the value as a substring — e.g. value "${ex.needle}" matches "${ex.text}". Case-insensitive unless Aa is on.`;
+    case "not-contains":
+      return `True if ${what} does not contain the value as a substring. Case-insensitive unless Aa is on.`;
+    case "is":
+      if (isList) return `Compares the whole ${what}, not a single recipient. True only if the entire joined list equals the value exactly — use "contains" to match one address.`;
+      if (isNameAddr) return `True only if ${what} equals the value exactly. From includes name and address, so match the full string, e.g. "${ex.text}".`;
+      if (isBody) return `True only if the entire body equals the value exactly — rarely useful; prefer "contains".`;
+      return `True only if ${what} equals the value exactly, with no extra characters — e.g. value "${ex.text}" matches only when ${what} is exactly "${ex.text}".`;
+    case "is-not":
+      if (isList) return `True if the whole ${what} does not equal the value exactly. Rarely what you want for a list — consider "does not contain".`;
+      if (isNameAddr) return `True if ${what} does not equal the value exactly. From includes name and address, so compare against the full string.`;
+      if (isBody) return `True if the body does not equal the value exactly — usually too broad; prefer "does not contain".`;
+      return `True if ${what} does not equal the value exactly — very broad (true for nearly every message); consider "does not contain".`;
+    case "starts-with":
+      if (isNameAddr) return `True if ${what} begins with the value — e.g. "${ex.prefix}" matches "${ex.text}" (From begins with the display name).`;
+      if (isBody) return `True if the body begins with the value — e.g. "${ex.prefix}" matches "${ex.text}". Matches only at the very start of the body.`;
+      if (isList) return `True if ${what} begins with the value (i.e. the first recipient starts with it) — e.g. "${ex.prefix}" matches "${ex.text}".`;
+      return `True if ${what} begins with the value — e.g. value "${ex.prefix}" matches "${ex.text}".`;
+    case "ends-with":
+      if (isNameAddr) return `True if ${what} ends with the value — e.g. "${ex.suffix}" matches "${ex.text}" (the address is at the end).`;
+      if (isBody) return `True if the body ends with the value — e.g. "${ex.suffix}" matches "${ex.text}". Matches only at the very end of the body.`;
+      if (isList) return `True if ${what} ends with the value (i.e. the last recipient ends with it) — e.g. "${ex.suffix}" matches "${ex.text}".`;
+      return `True if ${what} ends with the value — e.g. value "${ex.suffix}" matches "${ex.text}".`;
+    case "regex":
+      return `Treats the value as a JavaScript regular expression, tested against ${what}. Case-insensitive unless Aa is on — e.g. "\\b(amazon|ebay)\\b". An invalid pattern simply never matches.`;
+    case "has-confusable":
+      return `True if ${what} contains a non-ASCII character that looks like an ASCII letter or digit (a "confusable"). Detects spoofing — e.g. Cyrillic "а" (U+0430) looks like Latin "a".`;
+    case "confusable-with":
+      return `True if ${what} contains a lookalike spelling of the value. Field and value are collapsed to a common "skeleton" (lookalikes mapped together) before comparing — e.g. value "amazon" also matches "аmazon" with a Cyrillic "а". Case-insensitive unless Aa is on.`;
+    default:
+      return "";
+  }
+}
+
+const CASE_HELP = "Case-sensitive matching. When Aa is on (highlighted), \"Hello\" and \"hello\" differ; when off, case is ignored.";
+
+let helpPopover = null;
+
+function helpButton(text) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "help-icon";
+  btn.textContent = "?";
+  btn.setAttribute("aria-label", "Help");
+  btn.dataset.help = text;
+  return btn;
+}
+
+function showHelpPopover(text, anchor) {
+  hideHelpPopover();
+  const pop = document.createElement("div");
+  pop.className = "help-popover";
+  pop.textContent = text;
+  document.body.appendChild(pop);
+
+  const r = anchor.getBoundingClientRect();
+  const maxWidth = 280;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - maxWidth - 12));
+  pop.style.left = left + "px";
+
+  // Place below the anchor, flipping above when near the bottom edge.
+  if (r.bottom + 96 > window.innerHeight) {
+    pop.style.bottom = (window.innerHeight - r.top + 6) + "px";
+  } else {
+    pop.style.top = (r.bottom + 6) + "px";
+  }
+  helpPopover = pop;
+}
+
+function hideHelpPopover() {
+  if (helpPopover) {
+    helpPopover.remove();
+    helpPopover = null;
+  }
+}
+
+document.addEventListener("click", e => {
+  const icon = e.target.closest(".help-icon");
+  if (icon && icon.dataset.help) {
+    showHelpPopover(icon.dataset.help, icon);
+  } else {
+    hideHelpPopover();
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") hideHelpPopover();
+});
+
+window.addEventListener("scroll", hideHelpPopover, true);
+
 function renderConditionTree() {
   const container = document.getElementById("condition-tree");
   container.innerHTML = "";
@@ -468,6 +605,11 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
     });
 
     header.appendChild(label);
+    header.appendChild(helpButton(
+      node.type === "and"
+        ? "AND: match only when every child condition is true."
+        : "OR: match when at least one child condition is true."
+    ));
     header.appendChild(toggleTypeBtn);
     header.appendChild(addCondBtn);
     header.appendChild(addGroupBtn);
@@ -535,6 +677,7 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
     label.textContent = "NOT";
 
     header.appendChild(label);
+    header.appendChild(helpButton("NOT: inverts its single child — matches when the child condition does not match."));
 
     const unwrapBtn = document.createElement("button");
     unwrapBtn.className = "btn-ghost";
@@ -609,6 +752,7 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
       valSel.addEventListener("change", () => { node.value = valSel.value; });
 
       header.appendChild(fieldSel);
+      header.appendChild(helpButton(FIELD_HELP[node.field] || ""));
       header.appendChild(valSel);
     } else {
       const opSel = document.createElement("select");
@@ -619,30 +763,37 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
         if (op.value === node.operator) opt.selected = true;
         opSel.appendChild(opt);
       }
-      opSel.addEventListener("change", () => { node.operator = opSel.value; });
+
+      const fieldHelpBtn = helpButton(FIELD_HELP[node.field] || "");
+      const opHelpBtn = helpButton(operatorHelp(node.field, node.operator));
+      const caseHelpBtn = helpButton(CASE_HELP);
 
       const valInput = document.createElement("input");
       valInput.type = "text";
       valInput.value = node.value || "";
-      valInput.placeholder = node.operator === "regex" ? "regular expression" : "value";
       valInput.addEventListener("input", () => { node.value = valInput.value; });
 
       const caseToggle = makeCaseToggle(node);
 
-      const updateValueVisibility = () => {
+      const updateOperatorState = () => {
+        node.operator = opSel.value;
+        opHelpBtn.dataset.help = operatorHelp(node.field, node.operator);
         const hide = NO_VALUE_OPS.has(opSel.value);
         valInput.style.display = hide ? "none" : "";
         caseToggle.style.display = hide ? "none" : "";
-        if (opSel.value === "regex") valInput.placeholder = "regular expression";
-        else if (!hide) valInput.placeholder = "value";
+        caseHelpBtn.style.display = hide ? "none" : "";
+        valInput.placeholder = opSel.value === "regex" ? "regular expression" : "value";
       };
-      opSel.addEventListener("change", updateValueVisibility);
-      updateValueVisibility();
+      opSel.addEventListener("change", updateOperatorState);
+      updateOperatorState();
 
       header.appendChild(fieldSel);
+      header.appendChild(fieldHelpBtn);
       header.appendChild(opSel);
+      header.appendChild(opHelpBtn);
       header.appendChild(valInput);
       header.appendChild(caseToggle);
+      header.appendChild(caseHelpBtn);
     }
 
     if (onReplace) {
@@ -1235,6 +1386,18 @@ function openCompareModal(idx) {
 // ── Wire up top-level buttons ─────────────────────────────────────────────
 
 document.getElementById("btn-new-filter").addEventListener("click", openNewEditor);
+
+document.getElementById("btn-help").addEventListener("click", () => {
+  document.getElementById("modal-help-overlay").classList.remove("hidden");
+});
+document.getElementById("help-close").addEventListener("click", () => {
+  document.getElementById("modal-help-overlay").classList.add("hidden");
+});
+document.getElementById("modal-help-overlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-help-overlay")) {
+    document.getElementById("modal-help-overlay").classList.add("hidden");
+  }
+});
 
 document.getElementById("btn-run-all").addEventListener("click", () => {
   openRunModal(allFilters.filter(f => f.enabled));

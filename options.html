@@ -13,13 +13,21 @@
   <!-- ── Left panel: filter list ──────────────────────────────────────── -->
   <aside id="filter-list-panel">
     <header>
-      <h1>Filters</h1>
+      <div class="brand">
+        <img class="brand-logo" src="icons/icon-32.png" alt="Polimath logo" />
+        <div>
+          <h1>Polimath Filters</h1>
+          <p class="brand-tagline">Powerful email filters with regex &amp; boolean logic</p>
+        </div>
+      </div>
+      <div class="list-heading">Filters</div>
       <div class="header-actions">
         <button id="btn-new-filter" class="btn-primary">+ New Filter</button>
         <button id="btn-run-all" class="btn-secondary">▶ Run all on folder…</button>
         <button id="btn-monitored-folders" class="btn-secondary">Monitored folders…</button>
         <button id="btn-export" class="btn-secondary">Export…</button>
         <button id="btn-import" class="btn-secondary">Import…</button>
+        <button id="btn-help" class="btn-help">? Instructions</button>
         <input type="file" id="import-file-input" accept=".json" class="hidden" />
       </div>
     </header>
@@ -27,6 +35,9 @@
       <!-- populated by options.js -->
     </ul>
     <p id="filter-list-empty" class="empty-state">No filters yet. Click "+ New Filter" to create one.</p>
+    <footer class="panel-footer">
+      <a href="https://github.com/shaptonstahl/polimath-thunderbird-filters" target="_blank" rel="noopener">View on GitHub ↗</a>
+    </footer>
   </aside>
 
   <!-- ── Right panel: filter editor ──────────────────────────────────── -->
@@ -42,12 +53,18 @@
     <div class="editor-body">
 
       <section class="editor-section">
-        <label for="filter-name">Filter name</label>
+        <div class="section-heading-row">
+          <label for="filter-name">Filter name</label>
+          <button type="button" class="help-icon" data-help="A label for this filter, shown in the list. Export/import match filters by name, so keep names unique. Example: 'Newsletters → Archive'.">?</button>
+        </div>
         <input type="text" id="filter-name" placeholder="My filter" />
       </section>
 
       <section class="editor-section">
-        <h3>Folders</h3>
+        <div class="section-heading-row">
+          <h3>Folders</h3>
+          <button type="button" class="help-icon" data-help="This filter runs only on new mail arriving in the checked folders. Because a 'Move to folder' action moves mail out of the watched folder, the same message won't match this filter twice — that's what makes 'move' safe. Example: scope a 'Promotions' filter to the Inbox, then move its matches to an Archive folder.">?</button>
+        </div>
         <p class="hint">Apply to incoming mail in the checked folders only. Choose which folders are watched under <strong>Monitored folders…</strong>.</p>
         <div id="source-folders-list"></div>
         <button id="btn-source-folders-all" class="btn-secondary">Apply to all monitored folders</button>
@@ -55,12 +72,15 @@
 
       <section class="editor-section">
         <h3>Conditions</h3>
-        <p class="hint">Build any combination of AND / OR / NOT conditions. Incoming mail stops at the first matching filter.</p>
+        <p class="hint">Build any combination of AND / OR / NOT conditions. Incoming mail stops at the first matching filter (in list order) — drag filters in the list to reorder.</p>
         <div id="condition-tree"></div>
       </section>
 
       <section class="editor-section">
-        <h3>Actions</h3>
+        <div class="section-heading-row">
+          <h3>Actions</h3>
+          <button type="button" class="help-icon" data-help="Actions run in order on a matching message: Move to folder · Mark read/unread · Add star · Add/remove tag · Mark junk · Delete (moves to Trash). Example: a newsletter filter might move the message to an Archive folder and mark it read.">?</button>
+        </div>
         <div id="actions-list"></div>
         <button id="btn-add-action" class="btn-secondary">+ Add action</button>
       </section>
@@ -71,7 +91,7 @@
   <!-- ── Placeholder when nothing is selected ──────────────────────────── -->
   <main id="editor-placeholder">
     <div class="placeholder-inner">
-      <img src="icons/icon.svg" width="64" height="64" alt="" />
+      <img src="icons/icon-64.png" width="64" height="64" alt="" />
       <p>Select a filter to edit, or create a new one.</p>
     </div>
   </main>
@@ -186,6 +206,43 @@
     <div class="modal-actions">
       <button id="monitored-confirm" class="btn-primary">Save</button>
       <button id="monitored-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Instructions modal ──────────────────────────────────────────────────── -->
+<div id="modal-help-overlay" class="modal-overlay hidden">
+  <div class="modal-box modal-box-wide">
+    <h2>Instructions</h2>
+    <div class="instructions-body">
+      <h3>What Polimath Filters does</h3>
+      <p>Replaces Thunderbird's built-in filter editor with powerful regex and arbitrary boolean (AND / OR / NOT) conditions. Filters run automatically on new mail in your monitored folders.</p>
+
+      <h3>Monitored folders</h3>
+      <p>Use <strong>Monitored folders…</strong> to choose which folders are watched. Only new mail arriving in these folders is evaluated.</p>
+
+      <h3>Filter scope</h3>
+      <p>Each filter applies only to incoming mail in the folders checked in its <strong>Folders</strong> section. This is what makes a "Move to folder" action safe — a moved message no longer matches the filter that moved it.</p>
+
+      <h3>Conditions</h3>
+      <p>A condition tests one message field (Subject, From, Body, …) with an operator (contains, matches regex, has confusable character, …). Combine them with AND / OR / NOT groups.</p>
+
+      <h3>Actions</h3>
+      <p>What to do with a matching message: move to a folder, mark read/unread, star, add or remove a tag, mark as junk, or delete.</p>
+
+      <h3>First match wins</h3>
+      <p>Filters are evaluated top-to-bottom and stop at the first match — the same behavior as Thunderbird's built-in rules. Drag filters in the list to reorder them.</p>
+
+      <h3>Run now</h3>
+      <p><strong>▶ Run all on folder…</strong> applies your enabled filters to an existing folder. Use <strong>Dry Run</strong> to preview matches without changing anything.</p>
+
+      <h3>Export / Import</h3>
+      <p>Share filters as JSON. Folder IDs are machine-specific, so "Move to folder" actions may need reconfiguring after an import.</p>
+
+      <p>Source &amp; issues: <a href="https://github.com/shaptonstahl/polimath-thunderbird-filters" target="_blank" rel="noopener">github.com/shaptonstahl/polimath-thunderbird-filters</a></p>
+    </div>
+    <div class="modal-actions">
+      <button id="help-close" class="btn-primary">Done</button>
     </div>
   </div>
 </div>

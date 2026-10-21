@@ -277,7 +277,7 @@ background.js            New-mail event listener
 options.html             Options page markup
 options.js               Options page: filter list, condition tree editor, run-now
 options.css              Styles
-icons/icon.svg           Extension icon
+icons/icon-{16,32,48,64,128}.png   Extension icons (Polimath brand assets)
 scripts/
   build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running

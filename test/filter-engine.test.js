@@ -440,6 +440,15 @@ describe('action execution', () => {
     assert.equal(ctx.calls[0].props.flagged, true);
   });
 
+  it('remove-star calls update with { flagged: false }', async () => {
+    const ctx = makeContext([msg]);
+    await ctx.runFilter(mkFilter([{ type: 'remove-star' }]), msg, null);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
+    assert.equal(ctx.calls[0].id, 99);
+    assert.equal(ctx.calls[0].props.flagged, false);
+  });
+
   it('mark-junk calls update with { junk: true }', async () => {
     const ctx = makeContext([msg]);
     await ctx.runFilter(mkFilter([{ type: 'mark-junk' }]), msg, null);
@@ -659,6 +668,42 @@ describe('runFiltersOnFolder', () => {
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
     assert.equal(result.matched, 3);
     assert.equal(ctx.calls.length, 0);
+  });
+
+  it('all matching rules fire in a real run', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
+    const f2 = mkFilter('f2', allCond,     [{ type: 'mark-junk' }]);
+    await ctx.runFiltersOnFolder([f1, f2], 'inbox');
+    // msg1 & msg3 match both rules; msg2 matches only f2.
+    const readCalls = ctx.calls.filter(c => c.props && c.props.read === true);
+    const junkCalls = ctx.calls.filter(c => c.props && c.props.junk === true);
+    assert.equal(readCalls.length, 2);
+    assert.equal(junkCalls.length, 3);
+  });
+
+  it('a rule with stopProcessing true ends processing for later rules', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
+    f1.stopProcessing = true;
+    const f2 = mkFilter('f2', allCond, [{ type: 'mark-junk' }]);
+    const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox');
+    // msg1 & msg3 match f1 (stop) so f2 is skipped; msg2 matches only f2.
+    const readCalls = ctx.calls.filter(c => c.props && c.props.read === true);
+    const junkCalls = ctx.calls.filter(c => c.props && c.props.junk === true);
+    assert.equal(readCalls.length, 2);
+    assert.equal(junkCalls.length, 1);
+    assert.equal(result.matched, 3);
+  });
+
+  it('stopProcessing does not stop later rules in a dry run', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
+    f1.stopProcessing = true;
+    const f2 = mkFilter('f2', allCond, [{ type: 'mark-junk' }]);
+    const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
+    const invoiceHit = result.hits.find(h => h.subject === 'Invoice Q1');
+    assert.deepEqual(Array.from(invoiceHit.rules), ['f1', 'f2']);
   });
 
   it('fires onProgress callback when fetching full content', async () => {

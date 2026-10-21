@@ -298,7 +298,33 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .action-row select option { background: var(--bg-elevated); color: var(--text); }
 
+/* Tag selectors mirror Thunderbird's message list: white background, tag-colored text. */
+.action-row .tag-select,
+.action-row .tag-select option {
+  background: #ffffff;
+}
+
 .action-row .action-detail { flex: 1; }
+
+.stop-processing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stop-processing-row select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.stop-processing-row select option { background: var(--bg-elevated); color: var(--text); }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 button { cursor: pointer; border: none; border-radius: var(--radius); font-size: 12px; padding: 5px 10px; transition: background .1s; }

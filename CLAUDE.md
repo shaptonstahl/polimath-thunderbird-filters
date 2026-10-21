@@ -47,7 +47,7 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 
 ## Key design decisions
 
-- **First-match semantics**: for each message, filters are evaluated in list order and evaluation stops at the first match. This mirrors Thunderbird's built-in filter runner. See `docs/decisions/ADR-001-first-match-and-consumed-messages.md`.
+- **All-match semantics with stop processing**: for each message, filters are evaluated in list order and every matching filter's actions run. A filter ends a message's processing when it moves or deletes the message, or when its `stopProcessing` flag is set (exposed as a "Continue / Do not process subsequent rules" selector in the editor). See `docs/decisions/ADR-007-all-match-and-stop-processing.md`.
 - **Source-folder scoping**: a filter declares `sourceFolderIds`, a subset of the global `monitoredFolders` list. The background listener runs a filter only when new mail appears in one of its source folders; this is what makes `move` idempotent (a moved message no longer matches the filter that moved it). See `docs/decisions/ADR-006-multi-folder-monitoring-and-source-folder-scoping.md`.
 - **`filterAppliesToFolder(filter, folderId, accountId)`**: the single scope check used by `runFiltersOnFolder` (and the background listener's equivalent). New filters use `sourceFolderIds`; legacy `accountIds` filters are still honored when an `accountId` is supplied.
 - **`detectMoveCycle(filters)`**: builds the move graph (source scope → move destination) for enabled filters and returns the first cycle (or `null`). `options.js` rejects saves/enables that would create a cycle — the one shape source scoping alone cannot make idempotent.

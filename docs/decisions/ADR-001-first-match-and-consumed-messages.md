@@ -1,7 +1,7 @@
 # ADR-001: First-match semantics and consumed-message tracking
 
 ## Status
-Accepted
+Superseded by [ADR-007](ADR-007-all-match-and-stop-processing.md)
 
 ## Date
 2026-05-05

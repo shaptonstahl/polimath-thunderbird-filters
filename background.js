@@ -69,7 +69,7 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
     for (const filter of activeFilters) {
       try {
         const matched = await runFilter(filter, message, fullMessage, false, addressBookEmails);
-        if (matched) break; // first-match semantics for incoming mail
+        if (matched && filterEndsProcessing(filter)) break;
       } catch (err) {
         console.error("Polimath Filters: filter error", filter.name, err);
       }

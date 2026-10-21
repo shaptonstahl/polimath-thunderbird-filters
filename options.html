@@ -72,16 +72,23 @@
 
       <section class="editor-section">
         <h3>Conditions</h3>
-        <p class="hint">Build any combination of AND / OR / NOT conditions. Incoming mail stops at the first matching filter (in list order) — drag filters in the list to reorder.</p>
+        <p class="hint">Build any combination of AND / OR / NOT conditions. Every matching filter applies in list order; a filter that moves, deletes, or stops the message ends its processing — drag filters in the list to reorder.</p>
         <div id="condition-tree"></div>
       </section>
 
       <section class="editor-section">
         <div class="section-heading-row">
           <h3>Actions</h3>
-          <button type="button" class="help-icon" data-help="Actions run in order on a matching message: Move to folder · Mark read/unread · Add star · Add/remove tag · Mark junk · Delete (moves to Trash). Example: a newsletter filter might move the message to an Archive folder and mark it read.">?</button>
+          <button type="button" class="help-icon" data-help="Actions run in order on a matching message: Move to folder · Mark read/unread · Add/Remove star · Add/remove tag · Mark spam · Delete (moves to Trash). The selector below the actions controls whether later rules still process the message after this rule matches. Example: a newsletter filter might move the message to an Archive folder and mark it read.">?</button>
         </div>
         <div id="actions-list"></div>
+        <div class="stop-processing-row">
+          <label for="stop-processing-select">After this rule matches:</label>
+          <select id="stop-processing-select">
+            <option value="continue">Continue processing with subsequent rules</option>
+            <option value="stop">Do not process subsequent rules</option>
+          </select>
+        </div>
         <button id="btn-add-action" class="btn-secondary">+ Add action</button>
       </section>
 
@@ -228,10 +235,10 @@
       <p>A condition tests one message field (Subject, From, Body, …) with an operator (contains, matches regex, has confusable character, …). Combine them with AND / OR / NOT groups.</p>
 
       <h3>Actions</h3>
-      <p>What to do with a matching message: move to a folder, mark read/unread, star, add or remove a tag, mark as junk, or delete.</p>
+      <p>What to do with a matching message: move to a folder, mark read/unread, add or remove a star, add or remove a tag, mark as spam, or delete.</p>
 
-      <h3>First match wins</h3>
-      <p>Filters are evaluated top-to-bottom and stop at the first match — the same behavior as Thunderbird's built-in rules. Drag filters in the list to reorder them.</p>
+      <h3>Matching and stop processing</h3>
+      <p>Filters are evaluated top-to-bottom and <strong>every</strong> matching filter applies in order. Each rule has a selector — <strong>Continue processing with subsequent rules</strong> or <strong>Do not process subsequent rules</strong> — that controls what happens after it matches. A rule that moves or deletes the message always ends its processing. Drag filters in the list to reorder them.</p>
 
       <h3>Run now</h3>
       <p><strong>▶ Run all on folder…</strong> applies your enabled filters to an existing folder. Use <strong>Dry Run</strong> to preview matches without changing anything.</p>

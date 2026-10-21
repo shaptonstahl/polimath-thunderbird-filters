@@ -11,7 +11,7 @@ let editingIndex = -1;     // index in allFilters (-1 = new)
 let folderList = [];       // [{id, label, accountId, type}] populated on load
 let monitoredFolderIds = []; // persisted "monitoredFolders" — global watch list
 let monitoredSnapshot = [];  // snapshot at monitored-modal open, for cancel
-let tagList = [];          // [{key, tag}] populated on load
+let tagList = [];          // [{key, label, color}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
 let importCandidates = []; // filters parsed from an import file, pending selection
 let compareIdx = null;     // index into importCandidates currently open in compare modal
@@ -66,7 +66,7 @@ async function buildFolderList() {
 async function loadTagList() {
   try {
     const tags = await messenger.messages.listTags();
-    tagList = tags.map(t => ({ key: t.key, label: t.tag }));
+    tagList = tags.map(t => ({ key: t.key, label: t.tag, color: t.color }));
   } catch {
     tagList = [];
   }
@@ -236,6 +236,7 @@ function renderFilterList() {
 function openEditor(idx) {
   editingIndex = idx;
   editingFilter = JSON.parse(JSON.stringify(allFilters[idx]));
+  editingFilter.stopProcessing = !!editingFilter.stopProcessing;
   document.getElementById("editor-title").textContent = "Edit Filter";
   document.getElementById("filter-name").value = editingFilter.name || "";
   document.getElementById("editor-panel").classList.remove("hidden");
@@ -243,6 +244,7 @@ function openEditor(idx) {
   renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
+  renderStopProcessing();
   renderFilterList();
   savedSnapshot = currentFilterState();
   updateSaveButton();
@@ -256,7 +258,8 @@ function openNewEditor() {
     enabled: true,
     sourceFolderIds: [],
     condition: { type: "and", children: [] },
-    actions: []
+    actions: [],
+    stopProcessing: false
   };
   document.getElementById("editor-title").textContent = "New Filter";
   document.getElementById("filter-name").value = "";
@@ -265,6 +268,7 @@ function openNewEditor() {
   renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
+  renderStopProcessing();
   renderFilterList();
   savedSnapshot = currentFilterState();
   updateSaveButton();
@@ -825,14 +829,15 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
 // ── Actions list rendering ────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: "move",       label: "Move to folder" },
-  { value: "mark-read",  label: "Mark as read" },
-  { value: "mark-unread",label: "Mark as unread" },
-  { value: "add-star",   label: "Add star" },
-  { value: "add-tag",    label: "Add tag" },
-  { value: "remove-tag", label: "Remove tag" },
-  { value: "mark-junk",  label: "Mark as junk" },
-  { value: "delete",     label: "Delete (move to trash)" },
+  { value: "move",        label: "📁 Move to folder" },
+  { value: "mark-read",   label: "✅ Mark as read", bold: true },
+  { value: "mark-unread", label: "Mark as unread" },
+  { value: "add-star",    label: "⭐ Add star" },
+  { value: "remove-star", label: "Remove star" },
+  { value: "add-tag",     label: "🏷️ Add tag" },
+  { value: "remove-tag",  label: "Remove tag" },
+  { value: "mark-junk",   label: "🔥 Mark as spam" },
+  { value: "delete",      label: "🗑️ Delete (move to trash)" },
 ];
 
 function renderActionsList() {
@@ -841,6 +846,11 @@ function renderActionsList() {
   editingFilter.actions.forEach((action, idx) => {
     container.appendChild(buildActionRow(action, idx));
   });
+}
+
+function renderStopProcessing() {
+  const sel = document.getElementById("stop-processing-select");
+  sel.value = editingFilter.stopProcessing ? "stop" : "continue";
 }
 
 function buildActionRow(action, idx) {
@@ -852,6 +862,7 @@ function buildActionRow(action, idx) {
     const opt = document.createElement("option");
     opt.value = at.value;
     opt.textContent = at.label;
+    if (at.bold) opt.style.fontWeight = "bold";
     if (at.value === action.type) opt.selected = true;
     typeSel.appendChild(opt);
   }
@@ -901,15 +912,25 @@ function renderActionDetail(action, container) {
   } else if (action.type === "add-tag" || action.type === "remove-tag") {
     if (tagList.length > 0) {
       const sel = document.createElement("select");
+      sel.className = "tag-select";
       for (const t of tagList) {
         const opt = document.createElement("option");
         opt.value = t.key;
         opt.textContent = t.label;
+        if (t.color) opt.style.color = t.color;
         if (t.key === action.tag) opt.selected = true;
         sel.appendChild(opt);
       }
       if (!action.tag) action.tag = tagList[0].key;
-      sel.addEventListener("change", () => { action.tag = sel.value; });
+      const syncColor = () => {
+        const t = tagList.find(x => x.key === sel.value);
+        sel.style.color = t && t.color ? t.color : "";
+      };
+      syncColor();
+      sel.addEventListener("change", () => {
+        action.tag = sel.value;
+        syncColor();
+      });
       container.appendChild(sel);
     } else {
       const inp = document.createElement("input");
@@ -1020,7 +1041,7 @@ function renderRunResults(outcome, dryRun) {
 
   summary.textContent = dryRun
     ? `Dry run: ${outcome.matched} of ${outcome.total} messages match.`
-    : `Applied ${outcome.matched} of ${outcome.total} messages (first matching rule per message).`;
+    : `Applied ${outcome.matched} of ${outcome.total} messages.`;
 
   colgroup.innerHTML = "";
   runColWidths.forEach(w => {
@@ -1418,6 +1439,11 @@ document.getElementById("editor-panel").addEventListener("click", updateSaveButt
 document.getElementById("btn-add-action").addEventListener("click", () => {
   editingFilter.actions.push({ type: "mark-read" });
   renderActionsList();
+});
+
+document.getElementById("stop-processing-select").addEventListener("change", () => {
+  editingFilter.stopProcessing = document.getElementById("stop-processing-select").value === "stop";
+  updateSaveButton();
 });
 
 document.getElementById("btn-source-folders-all").addEventListener("click", () => {

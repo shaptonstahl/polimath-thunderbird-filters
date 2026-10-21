@@ -191,6 +191,9 @@ async function executeAction(action, message) {
     case "add-star":
       await messenger.messages.update(id, { flagged: true });
       break;
+    case "remove-star":
+      await messenger.messages.update(id, { flagged: false });
+      break;
     case "add-tag": {
       const current = await messenger.messages.get(id);
       const tags = current.tags || [];
@@ -222,6 +225,18 @@ async function executeActions(actions, message) {
       console.error("Polimath Filters: action failed", action.type, err);
     }
   }
+}
+
+/**
+ * True when a matching filter should end this message's processing so later
+ * filters skip it: it moves or deletes the message, or the rule is marked to
+ * stop processing.
+ */
+function filterEndsProcessing(filter) {
+  if (filter.stopProcessing) return true;
+  return (filter.actions || []).some(a =>
+    a && (a.type === "move" || a.type === "delete")
+  );
 }
 
 // ── Top-level filter runner ──────────────────────────────────────────────────
@@ -258,13 +273,14 @@ async function fetchAllMessages(folderId) {
  * Run a set of filters on all messages in a folder.
  *   - Fetch all headers once.
  *   - Pre-fetch full content in parallel batches when any filter needs it.
- *   - For each message, evaluate every enabled filter and report every match.
- *   - When dryRun is false, execute only the first matching filter's actions
- *     (first-match semantics, same as incoming-mail processing).
+ *   - For each message, evaluate filters in list order and execute the actions
+ *     of every filter whose condition matches (all-match). A filter that moves
+ *     or deletes the message, or is marked to stop processing, ends that
+ *     message's processing, so later filters skip it.
  *
  * Returns { matched: number, total: number, hits: array }.
  * `hits` has one entry per matched message: { subject, from, to, rules },
- * where `rules` lists the name of every filter whose condition matched.
+ * where `rules` lists, in firing order, every filter whose actions ran.
  * Only filters that apply to `folderId` run (see `filterAppliesToFolder`);
  * `accountId` is a legacy fallback for `accountIds`-scoped filters.
  */
@@ -308,15 +324,16 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
     const fullMessage = anyNeedsFull ? (fullCache.get(message.id) || null) : null;
 
     const rules = [];
-    let firstMatch = null;
     for (const filter of enabledFilters) {
-      if (evaluateNode(filter.condition, message, fullMessage, addressBookEmails)) {
-        rules.push(filter.name);
-        if (firstMatch === null) firstMatch = filter;
+      if (!evaluateNode(filter.condition, message, fullMessage, addressBookEmails)) continue;
+      rules.push(filter.name);
+      if (!dryRun) {
+        await executeActions(filter.actions, message);
+        if (filterEndsProcessing(filter)) break;
       }
     }
 
-    if (firstMatch === null) continue;
+    if (rules.length === 0) continue;
 
     matched++;
     hits.push({
@@ -325,10 +342,6 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
       to: (message.recipients || []).join(", "),
       rules,
     });
-
-    if (!dryRun) {
-      await executeActions(firstMatch.actions, message);
-    }
   }
 
   return { matched, total, hits };

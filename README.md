@@ -9,7 +9,7 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Case-sensitivity toggle** — per-condition, defaults to case-insensitive
 - **Nine condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment, Sender in address book
 - **Unicode confusable detection** — detect homoglyph/lookalike characters or match strings that are visually similar (e.g. Cyrillic "а" vs Latin "a")
-- **Eight actions** — Move, Mark read/unread, Add star, Add/remove tag, Mark as junk, Delete
+- **Nine actions** — Move, Mark read/unread, Add/Remove star, Add/remove tag, Mark as spam, Delete
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
 - **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
 - **Automatic filtering** — runs on new mail in any folder you choose to monitor
@@ -17,7 +17,6 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Manual run** — apply any filter (or all filters) to an existing folder
 - **Dry run** — preview how many messages a filter would affect without changing anything
 - **Smart folder scan** — messages moved or deleted by an earlier filter are skipped by later ones; full message content is fetched in parallel batches only when needed
-
 ## Installation
 
 ### From addons.thunderbird.net
@@ -60,7 +59,7 @@ Open the options page via **Tools → Add-on Options → Polimath Filters**, or 
 5. Add one or more actions.
 6. Click **Save**.
 
-Filters are evaluated in list order. For automatic new-mail filtering, the first matching filter wins and later filters are skipped for that message.
+Filters are evaluated in list order. Every matching filter applies in order; a filter that moves or deletes the message, or whose **Do not process subsequent rules** selector is set, ends that message's processing so later filters skip it.
 
 ### Building a condition tree
 
@@ -125,16 +124,17 @@ AND
 
 | Action | Details |
 |---|---|
-| Move to folder | Pick any folder from the dropdown |
-| Mark as read | Sets the read flag |
+| 📁 Move to folder | Pick any folder from the dropdown |
+| ✅ Mark as read | Sets the read flag |
 | Mark as unread | Clears the read flag |
-| Add star | Flags the message with a star |
-| Add tag | Select a tag from your Thunderbird tag list |
+| ⭐ Add star | Flags the message with a star |
+| Remove star | Clears the star flag |
+| 🏷️ Add tag | Select a tag from your Thunderbird tag list |
 | Remove tag | Select a tag to remove |
-| Mark as junk | Moves to Junk if Thunderbird is configured to do so |
-| Delete | Moves to Trash |
+| 🔥 Mark as spam | Moves to Spam if Thunderbird is configured to do so |
+| 🗑️ Delete (move to trash) | Moves to Trash |
 
-Multiple actions can be stacked on a single filter and execute in order.
+Multiple actions can be stacked on a single filter and execute in order. Below the actions, a **Continue / Do not process subsequent rules** selector controls whether later rules still apply to a message after this rule matches.
 
 ### Folder scoping and monitored folders
 
@@ -168,12 +168,12 @@ The output file can be imported back via the UI's Import button. Requires only P
 
 Every filter row has a **▶** (run) button. The top of the filter list also has **▶ Run all on folder…**. Both open a folder picker.
 
-- **Run** — evaluates conditions and executes the actions of the first matching rule per message.
+- **Run** — evaluates conditions and executes the actions of every matching rule per message, in order.
 - **Dry Run** — evaluates conditions without executing anything, so you can preview what would match.
 
 After running, the window shows the folder you scanned and a table of every message that matched any rule, with columns **Subject**, **From**, **To**, and **Rules Applied**. Drag the column borders to resize them; the widths are remembered between sessions. The table scrolls both vertically and horizontally.
 
-**First-match behaviour** — a message can match more than one rule, and the **Rules Applied** column lists them all. On a real **Run**, only the first matching rule's actions execute, mirroring Thunderbird's built-in filter runner (and incoming-mail processing).
+**All-match behaviour** — a message can match more than one rule, and the **Rules Applied** column lists every rule whose actions ran, in order. A rule that moves or deletes the message, or whose **Do not process subsequent rules** selector is set, ends that message's filtering so later rules skip it (incoming-mail processing behaves the same way).
 
 ## Regex
 
@@ -211,7 +211,8 @@ filter object:
   "enabled": true,
   "sourceFolderIds": [],                           // monitored folder IDs the filter applies to; empty = no folders
   "condition": { /* ConditionNode — see below */ },
-  "actions": [ /* Action[] — see below */ ]
+  "actions": [ /* Action[] — see below */ ],
+  "stopProcessing": false                          // true = don't run later rules after this one matches
 }
 ```
 
@@ -243,6 +244,7 @@ filter object:
 { "type": "mark-read"   }
 { "type": "mark-unread" }
 { "type": "add-star"    }
+{ "type": "remove-star" }
 { "type": "add-tag",    "tag": "$label1" }
 { "type": "remove-tag", "tag": "$label1" }
 { "type": "mark-junk"   }

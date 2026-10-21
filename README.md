@@ -295,6 +295,8 @@ docs/
 
 Releases are built by GitHub Actions, not by hand. Pushing to `main` with a changed `version` in `manifest.json` builds the XPI, verifies it, and publishes a GitHub release tagged `v<version>`.
 
+`package.json` is the single source of truth for the version. Bump it with `npm version` (which also updates `manifest.json` via the `version` lifecycle hook and commits/tags the change), or run `npm run sync-version` to copy the package version into `manifest.json` after editing it by hand. `scripts/check-version.sh` runs in CI and fails the build if the two ever drift.
+
 The packaging step is an explicit list of paths in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), not a glob — **a new runtime file must be added to that list**, or it will be missing from the XPI. `scripts/verify-xpi.sh` is the guard: it collects every path referenced by `manifest.json` and by the HTML pages the manifest points at, then fails the build if any of them is absent from the archive.
 
 ```sh

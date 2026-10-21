@@ -9,8 +9,10 @@ A Thunderbird MailExtension (Manifest V2) that replaces the built-in filter edit
 ```sh
 npm test                  # Run the filter-engine test suite (Node 18+)
 npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate confusables-data.js
+npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
+./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
 shellcheck scripts/*.sh   # Lint shell scripts (CI runs this on every push and PR)
 ```
 
@@ -67,7 +69,7 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - `messenger` is the global Thunderbird WebExtensions API — treat it like `browser` in Firefox extensions.
 - Async/await throughout. No callbacks, no `.then()` chains.
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
-- Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix.
+- Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix. `package.json` is the single source of truth for the version; `npm version <semver>` bumps it and keeps `manifest.json` in sync via the `version` lifecycle hook. Never hand-edit `manifest.json`'s `version` — run `npm run sync-version` instead.
 - No need to build the xpi manually - it's part of a git action
 - Adding a new file that the extension loads at runtime? Add it to the `zip` step in `.github/workflows/ci.yml`. The packaging list is a hand-maintained allowlist, not a glob. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
 - Shell scripts must pass `shellcheck` on its **default** profile — that is the CI gate. House style is `[[ ]]` tests, bare `"$var"` (no `${braces}` except for `:-` defaults), 4-space indent. Do not adopt `-o all` wholesale: SC2250 would require braces everywhere and conflicts with the existing scripts.

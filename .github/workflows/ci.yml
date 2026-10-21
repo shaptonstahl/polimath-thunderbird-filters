@@ -23,6 +23,11 @@ jobs:
           shellcheck --version
           shellcheck scripts/*.sh
 
+      # package.json is the single source of truth for the version; manifest.json
+      # must stay in sync. Fail loudly so a hand-edit to either file can't drift.
+      - name: Check version sync
+        run: ./scripts/check-version.sh
+
       - uses: actions/setup-node@v5
         with:
           node-version: '24'

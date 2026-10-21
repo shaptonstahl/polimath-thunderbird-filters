@@ -44,6 +44,9 @@ function makeContext(messages = [], fullMessages = {}, contactEmails = [], confu
     contacts: {
       list: async () => contactNodes,
     },
+    accounts: {
+      list: async () => [],
+    },
   };
 
   const ctx = { messenger, console, calls };
@@ -828,5 +831,134 @@ describe('confusables operators', () => {
       const cond = { type: 'condition', field: 'subject', operator: 'confusable-with', value: 'costco', caseSensitive: false };
       assert.ok(!EC.evaluateNode(cond, msg, null));
     });
+  });
+});
+
+// ── filterAppliesToFolder ─────────────────────────────────────────────────────
+
+describe('filterAppliesToFolder', () => {
+  it('sourceFolderIds include folder → true', () =>
+    assert.ok(E.filterAppliesToFolder({ sourceFolderIds: ['inbox'] }, 'inbox')));
+  it('sourceFolderIds exclude folder → false', () =>
+    assert.ok(!E.filterAppliesToFolder({ sourceFolderIds: ['other'] }, 'inbox')));
+  it('legacy accountIds match supplied accountId → true', () =>
+    assert.ok(E.filterAppliesToFolder({ accountIds: ['a1'] }, 'inbox', 'a1')));
+  it('legacy accountIds without accountId → true (no scope)', () =>
+    assert.ok(E.filterAppliesToFolder({ accountIds: ['a1'] }, 'inbox')));
+  it('no scope declared → true', () =>
+    assert.ok(E.filterAppliesToFolder({}, 'inbox')));
+});
+
+// ── detectMoveCycle ───────────────────────────────────────────────────────────
+
+describe('detectMoveCycle', () => {
+  const move = (folderId) => ({ type: 'move', folderId });
+  const mkFilter = (id, sourceFolderIds, actions, enabled = true) =>
+    ({ id, name: id, enabled, sourceFolderIds, condition: { type: 'and', children: [] }, actions });
+
+  it('returns null for no filters', () =>
+    assert.equal(E.detectMoveCycle([]), null));
+  it('returns null when no filter has a move action', () =>
+    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], [{ type: 'mark-read' }])]), null));
+  it('returns null for a single acyclic move', () =>
+    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], [move('B')])]), null));
+  it('detects a self-loop (destination inside own source scope)', () =>
+    assert.deepEqual(Array.from(E.detectMoveCycle([mkFilter('f1', ['A'], [move('A')])])), ['A', 'A']));
+  it('detects a two-folder cycle', () => {
+    const f1 = mkFilter('f1', ['A'], [move('B')]);
+    const f2 = mkFilter('f2', ['B'], [move('A')]);
+    assert.deepEqual(Array.from(E.detectMoveCycle([f1, f2])), ['A', 'B', 'A']);
+  });
+  it('detects a three-folder cycle', () => {
+    const f1 = mkFilter('f1', ['A'], [move('B')]);
+    const f2 = mkFilter('f2', ['B'], [move('C')]);
+    const f3 = mkFilter('f3', ['C'], [move('A')]);
+    assert.deepEqual(Array.from(E.detectMoveCycle([f1, f2, f3])), ['A', 'B', 'C', 'A']);
+  });
+  it('ignores disabled filters in the graph', () => {
+    const f1 = mkFilter('f1', ['A'], [move('B')]);
+    const f2 = mkFilter('f2', ['B'], [move('A')], false);
+    assert.equal(E.detectMoveCycle([f1, f2]), null);
+  });
+});
+
+// ── migrateFiltersToSourceFolders ─────────────────────────────────────────────
+
+describe('migrateFiltersToSourceFolders', () => {
+  const accounts = [
+    { id: 'acct1', name: 'A', folders: [
+      { id: 'inbox1', type: 'inbox', name: 'Inbox' },
+      { id: 'f1', type: null, name: 'Other', subFolders: [{ id: 'sub1', type: null, name: 'Sub' }] },
+    ]},
+    { id: 'acct2', name: 'B', folders: [{ id: 'inbox2', type: 'inbox', name: 'Inbox' }] },
+  ];
+
+  function migrationContext(accounts) {
+    const ctx = makeContext();
+    ctx.messenger.accounts.list = async () => accounts;
+    return ctx;
+  }
+
+  it('maps accountIds to each account inbox and drops accountIds', async () => {
+    const ctx = migrationContext(accounts);
+    const filters = [
+      { id: '1', name: 'a', enabled: true, accountIds: ['acct1', 'acct2'], condition: {}, actions: [] },
+    ];
+    const migrated = await ctx.migrateFiltersToSourceFolders(filters);
+    assert.deepEqual(migrated[0].sourceFolderIds, ['inbox1', 'inbox2']);
+    assert.equal(migrated[0].accountIds, undefined);
+  });
+
+  it('drops accountIds whose account has no inbox', async () => {
+    const ctx = migrationContext(accounts);
+    const filters = [
+      { id: '1', name: 'a', enabled: true, accountIds: ['acct1', 'missing'], condition: {}, actions: [] },
+    ];
+    const migrated = await ctx.migrateFiltersToSourceFolders(filters);
+    assert.deepEqual(migrated[0].sourceFolderIds, ['inbox1']);
+  });
+
+  it('returns the same array (no migration) when nothing needs migrating', async () => {
+    const ctx = makeContext();
+    ctx.messenger.accounts.list = async () => { throw new Error('must not be called'); };
+    const filters = [{ id: '1', name: 'a', enabled: true, sourceFolderIds: ['x'], condition: {}, actions: [] }];
+    const result = await ctx.migrateFiltersToSourceFolders(filters);
+    assert.equal(result, filters);
+  });
+
+  it('leaves filters that already have sourceFolderIds untouched', async () => {
+    const ctx = migrationContext(accounts);
+    const filters = [
+      { id: '1', name: 'a', enabled: true, sourceFolderIds: ['x'], condition: {}, actions: [] },
+      { id: '2', name: 'b', enabled: true, accountIds: ['acct1'], condition: {}, actions: [] },
+    ];
+    const migrated = await ctx.migrateFiltersToSourceFolders(filters);
+    assert.deepEqual(migrated[0].sourceFolderIds, ['x']);
+    assert.equal(migrated[0].accountIds, undefined);
+    assert.deepEqual(migrated[1].sourceFolderIds, ['inbox1']);
+  });
+});
+
+// ── runFiltersOnFolder — folder scoping ───────────────────────────────────────
+
+describe('runFiltersOnFolder — folder scoping', () => {
+  const msgs = [{ id: 1, subject: 'Invoice', author: 'a@b.com', recipients: [], hasAttachment: false }];
+  const cond = { type: 'condition', field: 'subject', operator: 'contains', value: 'invoice', caseSensitive: false };
+  const mkFilter = (id, sourceFolderIds) =>
+    ({ id, name: id, enabled: true, sourceFolderIds, condition: cond, actions: [{ type: 'mark-read' }] });
+
+  it('runs only filters scoped to the scanned folder', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', ['inbox']);
+    const f2 = mkFilter('f2', ['other']);
+    const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox');
+    assert.equal(result.matched, 1);
+  });
+
+  it('legacy accountIds scoping still works when accountId is supplied', async () => {
+    const ctx = makeContext(msgs);
+    const f = { id: 'f1', name: 'f1', enabled: true, accountIds: ['a1'], condition: cond, actions: [{ type: 'mark-read' }] };
+    const result = await ctx.runFiltersOnFolder([f], 'inbox', null, false, 'a1');
+    assert.equal(result.matched, 1);
   });
 });

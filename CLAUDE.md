@@ -21,7 +21,7 @@ shellcheck scripts/*.sh   # Lint shell scripts (CI runs this on every push and P
 ```
 confusables-data.js  Generated — sets self.CONFUSABLES_MAP (Unicode TR39 lookalike data)
 filter-engine.js     Pure evaluation logic — no DOM, no Thunderbird API calls (except messenger, injected)
-background.js        Listens for new mail, loads filters from storage, calls filter-engine
+background.js        Listens for new mail in monitored folders, loads filters, calls filter-engine
 options.js           Options page UI — filter list, condition tree editor, run-on-folder modal
 scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
@@ -46,6 +46,10 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 ## Key design decisions
 
 - **First-match semantics**: for each message, filters are evaluated in list order and evaluation stops at the first match. This mirrors Thunderbird's built-in filter runner. See `docs/decisions/ADR-001-first-match-and-consumed-messages.md`.
+- **Source-folder scoping**: a filter declares `sourceFolderIds`, a subset of the global `monitoredFolders` list. The background listener runs a filter only when new mail appears in one of its source folders; this is what makes `move` idempotent (a moved message no longer matches the filter that moved it). See `docs/decisions/ADR-006-multi-folder-monitoring-and-source-folder-scoping.md`.
+- **`filterAppliesToFolder(filter, folderId, accountId)`**: the single scope check used by `runFiltersOnFolder` (and the background listener's equivalent). New filters use `sourceFolderIds`; legacy `accountIds` filters are still honored when an `accountId` is supplied.
+- **`detectMoveCycle(filters)`**: builds the move graph (source scope → move destination) for enabled filters and returns the first cycle (or `null`). `options.js` rejects saves/enables that would create a cycle — the one shape source scoping alone cannot make idempotent.
+- **`migrateFiltersToSourceFolders(filters)`**: idempotently converts legacy `accountIds` to `sourceFolderIds` (each account's Inbox) and drops `accountIds`. Called from both `background.js` and `options.js` on load; persisted after a change. The global `monitoredFolders` list is seeded with every account's Inbox on first run after upgrade.
 - **Eager full-message prefetch**: when any active filter needs body/cc/bcc, `runFiltersOnFolder` fetches full content for all messages up front in parallel batches of 10 before evaluating any conditions. The trade-off is documented in `docs/decisions/ADR-002-eager-full-message-prefetch.md`.
 - **Eager address-book prefetch**: same pattern as full-message prefetch — when any active filter uses `in-address-book`, `fetchAddressBookEmails` is called once before the evaluation loop and kicked off in parallel with full-message prefetching. Documented in `docs/decisions/ADR-003-eager-address-book-prefetch.md`.
 - **`conditionNeedsProp(node, predicate)`**: the generic tree-walk helper for detecting whether a condition tree touches any field matching a predicate. Both `conditionNeedsFullMessage` and `conditionNeedsAddressBook` delegate to it. Add new external-data condition checks the same way.

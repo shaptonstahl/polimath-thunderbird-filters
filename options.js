@@ -8,8 +8,9 @@
 let allFilters = [];   // persisted filters
 let editingFilter = null;  // deep copy being edited
 let editingIndex = -1;     // index in allFilters (-1 = new)
-let folderList = [];       // [{id, label, accountId}] populated on load
-let accountList = [];      // [{id, name}] populated on load
+let folderList = [];       // [{id, label, accountId, type}] populated on load
+let monitoredFolderIds = []; // persisted "monitoredFolders" — global watch list
+let monitoredSnapshot = [];  // snapshot at monitored-modal open, for cancel
 let tagList = [];          // [{key, tag}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
 let importCandidates = []; // filters parsed from an import file, pending selection
@@ -21,21 +22,43 @@ let savedSnapshot = null;     // JSON of editingFilter at last open/save, for di
 
 async function loadFilters() {
   const data = await messenger.storage.local.get("filters");
-  allFilters = data.filters || [];
+  const original = data.filters || [];
+  allFilters = await migrateFiltersToSourceFolders(original);
+  if (allFilters !== original) {
+    await saveFilters();
+  }
 }
 
 async function saveFilters() {
   await messenger.storage.local.set({ filters: allFilters });
 }
 
+async function loadMonitoredFolders() {
+  const data = await messenger.storage.local.get("monitoredFolders");
+  if (Array.isArray(data.monitoredFolders)) {
+    monitoredFolderIds = data.monitoredFolders;
+    return;
+  }
+  try {
+    const inboxes = await fetchAccountInboxes();
+    monitoredFolderIds = [...inboxes.values()];
+  } catch (err) {
+    console.error("Polimath Filters: inbox enumeration failed", err);
+    monitoredFolderIds = [];
+  }
+  await saveMonitoredFolders();
+}
+
+async function saveMonitoredFolders() {
+  await messenger.storage.local.set({ monitoredFolders: monitoredFolderIds });
+}
+
 // ── Folder enumeration ────────────────────────────────────────────────────
 
 async function buildFolderList() {
   folderList = [];
-  accountList = [];
   const accounts = await messenger.accounts.list(true);
   for (const account of accounts) {
-    accountList.push({ id: account.id, name: account.name });
     folderList.push(...collectFolders(account.folders || [], account.name, account.id));
   }
 }
@@ -53,7 +76,7 @@ function collectFolders(folders, prefix, accountId) {
   const result = [];
   for (const folder of folders) {
     const label = prefix ? `${prefix} / ${folder.name}` : folder.name;
-    result.push({ id: folder.id, label, accountId });
+    result.push({ id: folder.id, label, accountId, type: folder.type || null });
     if (folder.subFolders?.length) {
       result.push(...collectFolders(folder.subFolders, label, accountId));
     }
@@ -149,6 +172,12 @@ function renderFilterList() {
     chk.addEventListener("change", e => {
       e.stopPropagation();
       allFilters[idx].enabled = chk.checked;
+      if (chk.checked && detectMoveCycle(allFilters)) {
+        chk.checked = false;
+        allFilters[idx].enabled = false;
+        alert("Enabling this filter would create a move loop.");
+        return;
+      }
       saveFilters();
       nameSpan.className = "filter-item-name" + (chk.checked ? "" : " disabled");
       toggle.title = chk.checked ? "Enabled" : "Disabled";
@@ -211,7 +240,7 @@ function openEditor(idx) {
   document.getElementById("filter-name").value = editingFilter.name || "";
   document.getElementById("editor-panel").classList.remove("hidden");
   document.getElementById("editor-placeholder").classList.add("hidden");
-  renderAccountsSection();
+  renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
   renderFilterList();
@@ -225,7 +254,7 @@ function openNewEditor() {
     id: crypto.randomUUID(),
     name: "",
     enabled: true,
-    accountIds: [],
+    sourceFolderIds: [],
     condition: { type: "and", children: [] },
     actions: []
   };
@@ -233,7 +262,7 @@ function openNewEditor() {
   document.getElementById("filter-name").value = "";
   document.getElementById("editor-panel").classList.remove("hidden");
   document.getElementById("editor-placeholder").classList.add("hidden");
-  renderAccountsSection();
+  renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
   renderFilterList();
@@ -278,6 +307,17 @@ function saveEditor() {
     alert("Add at least one condition before saving.");
     return;
   }
+
+  const candidate = editingIndex === -1
+    ? [...allFilters, editingFilter]
+    : allFilters.map((f, i) => (i === editingIndex ? editingFilter : f));
+  const cycle = detectMoveCycle(candidate);
+  if (cycle) {
+    const labels = cycle.map(id => folderList.find(f => f.id === id)?.label || id);
+    alert("Move actions form a loop: " + labels.join(" → ") + ". Adjust the move destinations or folder scopes.");
+    return;
+  }
+
   if (editingIndex === -1) {
     allFilters.push(editingFilter);
     editingIndex = allFilters.length - 1;
@@ -291,29 +331,39 @@ function saveEditor() {
   updateSaveButton();
 }
 
-// ── Account scope rendering ───────────────────────────────────────────────
+// ── Source-folder scope rendering ──────────────────────────────────────────
 
-function renderAccountsSection() {
-  const container = document.getElementById("accounts-list");
+function renderSourceFoldersSection() {
+  const container = document.getElementById("source-folders-list");
   container.innerHTML = "";
-  for (const account of accountList) {
+
+  const monitored = folderList.filter(f => monitoredFolderIds.includes(f.id));
+  if (monitored.length === 0) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "No monitored folders yet — add some under Monitored folders….";
+    container.appendChild(hint);
+    return;
+  }
+
+  for (const f of monitored) {
     const label = document.createElement("label");
-    label.className = "account-checkbox";
+    label.className = "folder-checkbox";
     const chk = document.createElement("input");
     chk.type = "checkbox";
-    chk.checked = (editingFilter.accountIds || []).includes(account.id);
+    chk.checked = (editingFilter.sourceFolderIds || []).includes(f.id);
     chk.addEventListener("change", () => {
-      if (!editingFilter.accountIds) editingFilter.accountIds = [];
+      if (!editingFilter.sourceFolderIds) editingFilter.sourceFolderIds = [];
       if (chk.checked) {
-        if (!editingFilter.accountIds.includes(account.id)) {
-          editingFilter.accountIds.push(account.id);
+        if (!editingFilter.sourceFolderIds.includes(f.id)) {
+          editingFilter.sourceFolderIds.push(f.id);
         }
       } else {
-        editingFilter.accountIds = editingFilter.accountIds.filter(id => id !== account.id);
+        editingFilter.sourceFolderIds = editingFilter.sourceFolderIds.filter(id => id !== f.id);
       }
     });
     label.appendChild(chk);
-    label.appendChild(document.createTextNode(" " + account.name));
+    label.appendChild(document.createTextNode("\u00a0" + f.label));
     container.appendChild(label);
   }
 }
@@ -918,6 +968,60 @@ async function executeModalRun(dryRun) {
 
 document.getElementById("modal-dry-run").addEventListener("click", () => executeModalRun(true));
 
+// ── Monitored folders modal ────────────────────────────────────────────────
+
+function openMonitoredModal() {
+  monitoredSnapshot = [...monitoredFolderIds];
+  renderMonitoredFolderList();
+  document.getElementById("modal-monitored-overlay").classList.remove("hidden");
+}
+
+function renderMonitoredFolderList() {
+  const container = document.getElementById("monitored-folder-list");
+  container.innerHTML = "";
+  for (const f of folderList) {
+    const label = document.createElement("label");
+    label.className = "folder-checkbox";
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = monitoredFolderIds.includes(f.id);
+    chk.addEventListener("change", () => {
+      if (chk.checked) {
+        if (!monitoredFolderIds.includes(f.id)) monitoredFolderIds.push(f.id);
+      } else {
+        monitoredFolderIds = monitoredFolderIds.filter(id => id !== f.id);
+      }
+    });
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode("\u00a0" + f.label));
+    container.appendChild(label);
+  }
+}
+
+function closeMonitoredModal(save) {
+  if (!save) monitoredFolderIds = [...monitoredSnapshot];
+  document.getElementById("modal-monitored-overlay").classList.add("hidden");
+}
+
+document.getElementById("btn-monitored-folders").addEventListener("click", openMonitoredModal);
+document.getElementById("monitored-select-all").addEventListener("click", () => {
+  monitoredFolderIds = folderList.filter(f => f.type === "inbox").map(f => f.id);
+  renderMonitoredFolderList();
+});
+document.getElementById("monitored-deselect-all").addEventListener("click", () => {
+  monitoredFolderIds = [];
+  renderMonitoredFolderList();
+});
+document.getElementById("monitored-confirm").addEventListener("click", async () => {
+  await saveMonitoredFolders();
+  closeMonitoredModal(true);
+  if (editingFilter) renderSourceFoldersSection();
+});
+document.getElementById("monitored-cancel").addEventListener("click", () => closeMonitoredModal(false));
+document.getElementById("modal-monitored-overlay").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-monitored-overlay")) closeMonitoredModal(false);
+});
+
 // ── Export ────────────────────────────────────────────────────────────────
 
 function openExportModal() {
@@ -1003,6 +1107,8 @@ function openImportModal(meta) {
   renderImportList();
   const hasMoveActions = importCandidates.some(f => f.actions.some(a => a.type === "move"));
   document.getElementById("import-move-warn").classList.toggle("hidden", !hasMoveActions);
+  const hasFolderScope = importCandidates.some(f => Array.isArray(f.sourceFolderIds) && f.sourceFolderIds.length > 0);
+  document.getElementById("import-folder-scope-warn").classList.toggle("hidden", !hasFolderScope);
   document.getElementById("modal-import-overlay").classList.remove("hidden");
 }
 
@@ -1151,9 +1257,9 @@ document.getElementById("btn-add-action").addEventListener("click", () => {
   renderActionsList();
 });
 
-document.getElementById("btn-accounts-all").addEventListener("click", () => {
-  editingFilter.accountIds = accountList.map(a => a.id);
-  renderAccountsSection();
+document.getElementById("btn-source-folders-all").addEventListener("click", () => {
+  editingFilter.sourceFolderIds = monitoredFolderIds.slice();
+  renderSourceFoldersSection();
 });
 
 document.getElementById("btn-export").addEventListener("click", openExportModal);
@@ -1234,6 +1340,6 @@ document.getElementById("compare-done").addEventListener("click", () => {
 
 (async () => {
   initRunColumnResizers();
-  await Promise.all([loadFilters(), buildFolderList(), loadTagList(), loadRunColWidths()]);
+  await Promise.all([loadFilters(), buildFolderList(), loadMonitoredFolders(), loadTagList(), loadRunColWidths()]);
   renderFilterList();
 })();

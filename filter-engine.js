@@ -265,11 +265,12 @@ async function fetchAllMessages(folderId) {
  * Returns { matched: number, total: number, hits: array }.
  * `hits` has one entry per matched message: { subject, from, to, rules },
  * where `rules` lists the name of every filter whose condition matched.
- * accountId, when provided, skips filters not scoped to that account.
+ * Only filters that apply to `folderId` run (see `filterAppliesToFolder`);
+ * `accountId` is a legacy fallback for `accountIds`-scoped filters.
  */
 async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null) {
   const enabledFilters = filters.filter(f =>
-    f.enabled && (!accountId || f.accountIds?.includes(accountId))
+    f.enabled && filterAppliesToFolder(f, folderId, accountId)
   );
   if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: [] };
 
@@ -331,4 +332,120 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
   }
 
   return { matched, total, hits };
+}
+
+// ── Folder scoping, migration & cycle detection ──────────────────────────────
+
+/**
+ * True if `filter` should run against a message currently in `folderId`.
+ * New filters declare `sourceFolderIds`; legacy filters use `accountIds`
+ * (checked only when an accountId is supplied, as in the run-on-folder modal).
+ * A filter with no scope declared applies to every folder.
+ */
+function filterAppliesToFolder(filter, folderId, accountId = null) {
+  if (Array.isArray(filter.sourceFolderIds)) {
+    return filter.sourceFolderIds.includes(folderId);
+  }
+  if (accountId != null && Array.isArray(filter.accountIds)) {
+    return filter.accountIds.includes(accountId);
+  }
+  return true;
+}
+
+function collectFoldersFlat(folders, out = []) {
+  for (const folder of folders || []) {
+    out.push(folder);
+    if (folder.subFolders?.length) collectFoldersFlat(folder.subFolders, out);
+  }
+  return out;
+}
+
+async function fetchAccountInboxes() {
+  const accounts = await messenger.accounts.list(true);
+  const inboxByAccount = new Map();
+  for (const account of accounts) {
+    const inbox = collectFoldersFlat(account.folders).find(f => f.type === "inbox");
+    if (inbox) inboxByAccount.set(account.id, inbox.id);
+  }
+  return inboxByAccount;
+}
+
+/**
+ * Migrate legacy `accountIds` scoping to `sourceFolderIds` (the Inbox of each
+ * account), matching the pre-2.1 behavior of running on each account's Inbox.
+ * Idempotent: filters that already have `sourceFolderIds` are left untouched.
+ */
+async function migrateFiltersToSourceFolders(filters) {
+  const needsMigration = filters.some(f =>
+    f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds)
+  );
+  if (!needsMigration) return filters;
+
+  let inboxByAccount;
+  try {
+    inboxByAccount = await fetchAccountInboxes();
+  } catch (err) {
+    console.error("Polimath Filters: account enumeration failed during migration", err);
+    return filters;
+  }
+
+  return filters.map(f => {
+    if (f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds)) {
+      const sourceFolderIds = f.accountIds.map(id => inboxByAccount.get(id)).filter(Boolean);
+      const copy = { ...f, sourceFolderIds };
+      delete copy.accountIds;
+      return copy;
+    }
+    return f;
+  });
+}
+
+/**
+ * Detect a cycle in the move graph: each enabled filter with a `move` action
+ * adds an edge from every folder in its source scope to the move destination.
+ * Returns the cycle as an array of folder ids, or null when the graph is acyclic.
+ */
+function detectMoveCycle(filters) {
+  const edges = new Map();
+  for (const f of filters || []) {
+    if (!f || !f.enabled) continue;
+    const sources = Array.isArray(f.sourceFolderIds) ? f.sourceFolderIds : [];
+    const dests = (f.actions || [])
+      .filter(a => a && a.type === "move" && a.folderId)
+      .map(a => a.folderId);
+    for (const src of sources) {
+      for (const dst of dests) {
+        if (!edges.has(src)) edges.set(src, new Set());
+        edges.get(src).add(dst);
+      }
+    }
+  }
+
+  const done = new Set();
+  const path = new Set();
+  const stack = [];
+
+  function walk(node) {
+    if (path.has(node)) {
+      const start = stack.indexOf(node);
+      return stack.slice(start).concat(node);
+    }
+    if (done.has(node)) return null;
+    done.add(node);
+    path.add(node);
+    stack.push(node);
+    for (const next of edges.get(node) || []) {
+      const cycle = walk(next);
+      if (cycle) return cycle;
+    }
+    stack.pop();
+    path.delete(node);
+    return null;
+  }
+
+  for (const node of edges.keys()) {
+    const cycle = walk(node);
+    if (cycle) return cycle;
+  }
+  return null;
 }

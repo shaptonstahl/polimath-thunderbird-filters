@@ -373,18 +373,39 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
   border-color: var(--accent);
 }
 
-/* ── Account checkboxes ───────────────────────────────────────────────────── */
-#accounts-list { display: flex; flex-direction: column; gap: 6px; }
+/* ── Folder checkboxes (source scope + monitored folders) ─────────────────── */
+#source-folders-list { display: flex; flex-direction: column; gap: 10px; }
 
-.account-checkbox {
+.folder-group-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.folder-checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   font-weight: normal;
+  padding-left: 14px;
 }
 
-.account-checkbox input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+.folder-checkbox input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+
+#monitored-folder-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 /* ── Run results table ─────────────────────────────────────────────────────── */
 .run-folder-label { font-weight: 600; font-size: 13px; }

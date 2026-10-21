@@ -12,7 +12,8 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Eight actions** — Move, Mark read/unread, Add star, Add/remove tag, Mark as junk, Delete
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
 - **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
-- **Automatic filtering** — runs on new incoming mail
+- **Automatic filtering** — runs on new mail in any folder you choose to monitor
+- **Folder scoping** — each filter applies to a subset of the monitored folders
 - **Manual run** — apply any filter (or all filters) to an existing folder
 - **Dry run** — preview how many messages a filter would affect without changing anything
 - **Smart folder scan** — messages moved or deleted by an earlier filter are skipped by later ones; full message content is fetched in parallel batches only when needed
@@ -54,7 +55,7 @@ Open the options page via **Tools → Add-on Options → Polimath Filters**, or 
 
 1. Click **+ New Filter**.
 2. Give the filter a name.
-3. Optionally restrict the filter to one or more accounts (see [Account scoping](#account-scoping)).
+3. Optionally restrict the filter to one or more monitored folders (see [Folder scoping](#folder-scoping)).
 4. Build a condition tree (see below).
 5. Add one or more actions.
 6. Click **Save**.
@@ -135,11 +136,16 @@ AND
 
 Multiple actions can be stacked on a single filter and execute in order.
 
-### Account scoping
+### Folder scoping and monitored folders
 
-A filter only runs on mail from the accounts you check in the editor. Leave every account unchecked and the filter won't run at all. Use the **Apply to all accounts** button to check every account at once.
+Automatic filtering is no longer limited to the Inbox. There are two levels:
 
-This is useful when you have multiple email addresses with different naming conventions or different tagging schemes.
+- **Monitored folders** — the global list of folders the extension watches for automatic filtering. Open **Monitored folders…** from the filter-list toolbar to pick them. On first run after upgrading, this is seeded with every account's Inbox, so existing behavior is unchanged.
+- **Source folders** — in each filter's editor, the **Folders** section lists the monitored folders and lets you check the subset that filter applies to. Use **Apply to all monitored folders** to check every one.
+
+A filter only runs on mail that appears in one of its checked folders. This is what keeps the "move to folder" action idempotent: once a message is moved out of a folder, it no longer matches filters scoped to that folder, so it cannot be moved back and forth.
+
+> Filters whose move actions would form a loop (e.g. one filter moves Inbox → Bills and another moves Bills → Inbox) are rejected when you save, so a message can never bounce between two folders forever.
 
 ### Import and export
 
@@ -194,14 +200,16 @@ An invalid regex (e.g. an unclosed `[`) evaluates silently to `false` rather tha
 
 ## Data format
 
-Filters are stored in `browser.storage.local` under the key `filters` as a JSON array. Each filter object:
+Filters are stored in `browser.storage.local` under the key `filters` as a JSON array. The global
+monitored-folder list is stored under the key `monitoredFolders` as an array of folder ids. Each
+filter object:
 
 ```jsonc
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",   // UUID
   "name": "Archive invoices",
   "enabled": true,
-  "accountIds": [],                                // account IDs the filter applies to; empty = no accounts
+  "sourceFolderIds": [],                           // monitored folder IDs the filter applies to; empty = no folders
   "condition": { /* ConditionNode — see below */ },
   "actions": [ /* Action[] — see below */ ]
 }
@@ -276,7 +284,11 @@ scripts/
   verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
 test/
   filter-engine.test.js  Node.js unit tests for filter-engine.js
-docs/decisions/          Architecture Decision Records (ADRs)
+docs/
+  architecture.md        Runtime architecture + new-mail main loop
+  data-model.md          Storage model and move-graph cycle detection
+  diagrams.md            Diagram legend and inventory
+  decisions/             Architecture Decision Records (ADRs)
 ```
 
 ### Releases and packaging

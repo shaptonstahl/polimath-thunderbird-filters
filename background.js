@@ -1,25 +1,47 @@
 /**
  * background.js
- * Loads filters from storage, listens for new mail, runs the filter engine.
+ * Loads filters and monitored folders from storage, migrates legacy scoping,
+ * listens for new mail, runs the filter engine.
  */
 
 let cachedFilters = [];
+let cachedMonitoredFolders = [];
 
-async function loadFilters() {
-  const data = await messenger.storage.local.get("filters");
-  cachedFilters = data.filters || [];
+async function loadState() {
+  const data = await messenger.storage.local.get(["filters", "monitoredFolders"]);
+  const originalFilters = data.filters || [];
+  const filters = await migrateFiltersToSourceFolders(originalFilters);
+  if (filters !== originalFilters) {
+    await messenger.storage.local.set({ filters });
+  }
+
+  let monitored = Array.isArray(data.monitoredFolders) ? data.monitoredFolders : null;
+  if (monitored === null) {
+    try {
+      const inboxes = await fetchAccountInboxes();
+      monitored = [...inboxes.values()];
+    } catch (err) {
+      console.error("Polimath Filters: inbox enumeration failed", err);
+      monitored = [];
+    }
+    await messenger.storage.local.set({ monitoredFolders: monitored });
+  }
+
+  cachedFilters = filters;
+  cachedMonitoredFolders = monitored;
 }
 
 messenger.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.filters) {
-    cachedFilters = changes.filters.newValue || [];
-  }
+  if (area !== "local") return;
+  if (changes.filters) cachedFilters = changes.filters.newValue || [];
+  if (changes.monitoredFolders) cachedMonitoredFolders = changes.monitoredFolders.newValue || [];
 });
 
 messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => {
-  const accountId = folder.accountId;
+  if (!cachedMonitoredFolders.includes(folder.id)) return;
+
   const activeFilters = cachedFilters.filter(f =>
-    f.enabled && f.accountIds?.includes(accountId)
+    f.enabled && (f.sourceFolderIds || []).includes(folder.id)
   );
 
   const needsFull = activeFilters.some(f => conditionNeedsFullMessage(f.condition));
@@ -55,4 +77,4 @@ messenger.messages.onNewMailReceived.addListener(async (folder, messageList) => 
   }
 });
 
-loadFilters();
+loadState();

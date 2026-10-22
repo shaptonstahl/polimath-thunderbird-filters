@@ -338,6 +338,7 @@ async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false,
       rules.push(filter.name);
       if (!dryRun) {
         await executeActions(filter.actions, message);
+        await executeEnding(filter.ending, message);
         if (filterEndsProcessing(filter)) break;
       }
     }

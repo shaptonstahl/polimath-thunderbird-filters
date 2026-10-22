@@ -668,6 +668,16 @@ describe('runFiltersOnFolder', () => {
     assert.equal(markReadCalls.length, 1);
   });
 
+  it('a delete ending actually deletes matching messages', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', invoiceCond, []);
+    f1.ending = { type: 'delete' };
+    await ctx.runFiltersOnFolder([f1], 'inbox');
+    const deletes = ctx.calls.filter(c => c.type === 'delete');
+    assert.equal(deletes.length, 2);
+    assert.deepEqual(deletes.map(c => c.ids[0]), [1, 3]);
+  });
+
   it('dry run does not consume messages, so later filters see them', async () => {
     const ctx = makeContext(msgs);
     // In dry-run no actions execute, and every matching filter is reported.

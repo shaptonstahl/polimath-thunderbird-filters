@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Polimath Filters",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Powerful email filters with regex and arbitrary boolean conditions.",
   "author": "Stephen Haptonstahl",
   "browser_specific_settings": {

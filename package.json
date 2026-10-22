@@ -1,6 +1,6 @@
 {
   "name": "polimath-thunderbird-filters",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Thunderbird MailExtension with boolean-tree filters and regex support",
   "license": "Apache-2.0",
   "scripts": {

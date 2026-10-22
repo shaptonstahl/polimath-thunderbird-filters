@@ -79,17 +79,22 @@
       <section class="editor-section">
         <div class="section-heading-row">
           <h3>Actions</h3>
-          <button type="button" class="help-icon" data-help="Actions run in order on a matching message: Move to folder · Mark read/unread · Add/Remove star · Add/remove tag · Mark spam · Delete (moves to Trash). The selector below the actions controls whether later rules still process the message after this rule matches. Example: a newsletter filter might move the message to an Archive folder and mark it read.">?</button>
+          <button type="button" class="help-icon" data-help="Actions run in order on a matching message: Mark read/unread · Add/Remove star · Add/remove tag · Mark spam. The selector below the actions decides how the rule ends: continue to later rules, stop processing with later rules, move the message to a folder, or delete it. Example: a newsletter filter might mark the message read and move it to an Archive folder.">?</button>
         </div>
         <div id="actions-list"></div>
-        <div class="stop-processing-row">
-          <label for="stop-processing-select">After this rule matches:</label>
-          <select id="stop-processing-select">
-            <option value="continue">Continue processing with subsequent rules</option>
-            <option value="stop">Do not process subsequent rules</option>
-          </select>
-        </div>
         <button id="btn-add-action" class="btn-secondary">+ Add action</button>
+        <div class="ending-row">
+          <label for="ending-select">After this rule matches:</label>
+          <select id="ending-select">
+            <option value="continue">➡️ Continue processing with subsequent rules</option>
+            <option value="stop">🛑 Do not process these messages with subsequent rules</option>
+            <option value="move">📁 Move to a folder</option>
+            <option value="delete">🗑️ Delete</option>
+          </select>
+          <span id="ending-folder-wrap" class="hidden">
+            <select id="ending-folder-select"></select>
+          </span>
+        </div>
       </section>
 
     </div>
@@ -168,7 +173,7 @@
       <button id="import-deselect-all" class="btn-ghost">Deselect all</button>
     </div>
     <ul id="import-filter-list" class="check-list"></ul>
-    <p id="import-move-warn" class="hint hidden">⚠ Some filters use "Move to folder" actions. Folder IDs are machine-specific — you may need to reconfigure those actions after importing.</p>
+    <p id="import-move-warn" class="hint hidden">⚠ Some filters use a "Move to a folder" ending. Folder IDs are machine-specific — you may need to reconfigure those after importing.</p>
     <p id="import-folder-scope-warn" class="hint hidden">⚠ Some filters are scoped to specific folders. Folder references are machine-specific — you may need to reconfigure them after importing.</p>
     <div class="modal-actions">
       <button id="import-confirm" class="btn-primary" disabled>Import Selected</button>
@@ -204,7 +209,8 @@
 <div id="modal-monitored-overlay" class="modal-overlay hidden">
   <div class="modal-box modal-box-wide">
     <h2>Monitored Folders</h2>
-    <p class="hint">Automatic filtering watches the checked folders. Each filter then applies to a subset of these.</p>
+    <p class="hint">Automatic filtering watches the checked folders, and each filter applies to a subset of these. Any folder you want a rule to watch must be checked here.</p>
+    <p class="hint">Checking all folders slows processing down significantly — watch only the folders you actually need.</p>
     <div class="modal-select-all-row">
       <button id="monitored-select-all" class="btn-ghost">Select all inboxes</button>
       <button id="monitored-deselect-all" class="btn-ghost">Clear all</button>
@@ -235,10 +241,10 @@
       <p>A condition tests one message field (Subject, From, Body, …) with an operator (contains, matches regex, has confusable character, …). Combine them with AND / OR / NOT groups.</p>
 
       <h3>Actions</h3>
-      <p>What to do with a matching message: move to a folder, mark read/unread, add or remove a star, add or remove a tag, mark as spam, or delete.</p>
+      <p>What to do with a matching message: mark read/unread, add or remove a star, add or remove a tag, or mark as spam.</p>
 
-      <h3>Matching and stop processing</h3>
-      <p>Filters are evaluated top-to-bottom and <strong>every</strong> matching filter applies in order. Each rule has a selector — <strong>Continue processing with subsequent rules</strong> or <strong>Do not process subsequent rules</strong> — that controls what happens after it matches. A rule that moves or deletes the message always ends its processing. Drag filters in the list to reorder them.</p>
+      <h3>Ending a rule</h3>
+      <p>Filters are evaluated top-to-bottom and <strong>every</strong> matching filter applies in order. Each rule ends in exactly one way, chosen in the <strong>After this rule matches</strong> selector: <strong>Continue processing with subsequent rules</strong>, <strong>Do not process these messages with subsequent rules</strong>, <strong>Move to a folder</strong>, or <strong>Delete</strong>. The last three all end the message's processing. Drag filters in the list to reorder them.</p>
 
       <h3>Run now</h3>
       <p><strong>▶ Run all on folder…</strong> applies your enabled filters to an existing folder. Use <strong>Dry Run</strong> to preview matches without changing anything.</p>

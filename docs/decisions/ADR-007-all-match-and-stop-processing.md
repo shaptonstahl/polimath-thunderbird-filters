@@ -1,4 +1,4 @@
-# ADR-007: All-match semantics and explicit stop processing
+# ADR-007: All-match semantics and a terminal ending
 
 ## Status
 Accepted
@@ -24,30 +24,40 @@ adding a "move to the same folder" action, which the save-time move-cycle detect
 ## Decision
 
 Restore all-match semantics for both incoming mail and run-on-folder scans, and make
-"stop processing" an explicit per-rule setting rather than a kludge:
+how a rule ends an explicit, single, mutually-exclusive choice:
 
 - For each message, filters are evaluated in list order and **every** matching filter's
   actions run.
-- A filter ends a message's processing when it moves or deletes the message (the message
-  is gone), or when its `stopProcessing` flag is `true`. Later filters skip the message.
-- `stopProcessing` is a first-class boolean on each filter, edited via a
-  "Continue processing with subsequent rules / Do not process subsequent rules" selector
-  in the actions section of the filter editor. It defaults to `false`.
-- In dry-run mode no actions execute and nothing is consumed, so every matching filter is
-  reported (unchanged from ADR-001's dry-run behavior).
+- A filter carries an `ending` with exactly one of four values:
+  - `{ "type": "continue" }` — the default; later filters still run.
+  - `{ "type": "stop" }` — end processing but leave the message in place; later filters
+    are skipped.
+  - `{ "type": "move", "folderId": "...", "folderName": "..." }` — move the message,
+    ending its processing.
+  - `{ "type": "delete" }` — delete the message, ending its processing.
+- Move and delete are no longer entries in `actions`; they live only in `ending`, so a
+  rule cannot have both a move and a delete, nor more than one of either. The editor
+  exposes this as an **After this rule matches** selector (continue / do not process
+  subsequent rules / move to a folder / delete) with a folder picker that appears only
+  for move.
+- In dry-run mode no actions execute and nothing is consumed, so every matching filter
+  is reported (unchanged from ADR-001's dry-run behavior).
 
 ## Consequences
 
-- A message can be acted on by more than one rule, which is what the user expects and what
-  v1.0.0's run-on-folder scan did. Ordering still matters, but a non-consuming rule no
-  longer hides later rules.
-- "Stop processing" is now explicit and visible for every rule, replacing the
+- A message can be acted on by more than one rule, which is what the user expects and
+  what v1.0.0's run-on-folder scan did. Ordering still matters, but a non-terminating
+  rule no longer hides later rules.
+- "Do not process subsequent rules" is a first-class ending (`stop`), distinct from
+  move/delete: it ends processing while leaving the message in place. It replaces the
   "move to the same folder" workaround that ADR-006's cycle detector correctly rejected.
-- `filterEndsProcessing(filter)` in `filter-engine.js` is the single source of truth for
-  whether a matching filter ends a message's processing: `stopProcessing` OR a move/delete
-  action.
+- `filterEndsProcessing(filter)` in `filter-engine.js` is true exactly when
+  `filter.ending.type` is `stop`, `move`, or `delete`.
 - The run-on-folder results still report one row per matched message; its "Rules Applied"
-  column now lists every rule whose actions ran, in firing order, stopping at the
-  consuming rule.
-- This is a breaking change: filter lists that relied on first-match to suppress later
-  rules must set `stopProcessing` on the rule that should terminate processing.
+  column lists every rule whose actions ran, in firing order, stopping at the terminating
+  rule.
+- `migrateFiltersToEnding` upgrades existing filters: a `move` action becomes a move
+  ending, a `delete` action a delete ending, and a legacy `stopProcessing` flag without
+  a move/delete becomes a `stop` ending.
+- This is a breaking change: filter lists that relied on first-match change behavior and
+  should be reviewed.

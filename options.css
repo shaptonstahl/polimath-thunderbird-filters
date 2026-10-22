@@ -306,7 +306,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .action-row .action-detail { flex: 1; }
 
-.stop-processing-row {
+.ending-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -315,7 +315,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   color: var(--text-muted);
 }
 
-.stop-processing-row select {
+.ending-row select {
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -324,7 +324,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   color: var(--text);
 }
 
-.stop-processing-row select option { background: var(--bg-elevated); color: var(--text); }
+.ending-row select option { background: var(--bg-elevated); color: var(--text); }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 button { cursor: pointer; border: none; border-radius: var(--radius); font-size: 12px; padding: 5px 10px; transition: background .1s; }

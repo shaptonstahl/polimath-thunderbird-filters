@@ -411,7 +411,7 @@ describe('evaluateNode', () => {
 describe('action execution', () => {
   const msg = { id: 99, subject: 'Test', author: 'a@b.com', recipients: [], hasAttachment: false };
   const trueCond = { type: 'condition', field: 'subject', operator: 'contains', value: 'test', caseSensitive: false };
-  const mkFilter = (actions) => ({ id: '1', name: 'f', enabled: true, condition: trueCond, actions });
+  const mkFilter = (actions, ending) => ({ id: '1', name: 'f', enabled: true, condition: trueCond, actions, ending });
 
   it('mark-read calls update with { read: true }', async () => {
     const ctx = makeContext([msg]);
@@ -458,9 +458,9 @@ describe('action execution', () => {
     assert.equal(ctx.calls[0].props.junk, true);
   });
 
-  it('move calls messages.move with the target folder id', async () => {
+  it('move ending calls messages.move with the target folder id', async () => {
     const ctx = makeContext([msg]);
-    await ctx.runFilter(mkFilter([{ type: 'move', folderId: 'folder-42' }]), msg, null);
+    await ctx.runFilter(mkFilter([], { type: 'move', folderId: 'folder-42' }), msg, null);
     assert.equal(ctx.calls.length, 1);
     assert.equal(ctx.calls[0].type, 'move');
     assert.equal(ctx.calls[0].folderId, 'folder-42');
@@ -468,13 +468,20 @@ describe('action execution', () => {
     assert.equal(ctx.calls[0].ids[0], 99);
   });
 
-  it('delete calls messages.delete', async () => {
+  it('delete ending calls messages.delete', async () => {
     const ctx = makeContext([msg]);
-    await ctx.runFilter(mkFilter([{ type: 'delete' }]), msg, null);
+    await ctx.runFilter(mkFilter([], { type: 'delete' }), msg, null);
     assert.equal(ctx.calls.length, 1);
     assert.equal(ctx.calls[0].type, 'delete');
     assert.equal(ctx.calls[0].ids[0], 99);
     assert.equal(ctx.calls[0].skipTrash, false);
+  });
+
+  it('continue ending executes no terminal action', async () => {
+    const ctx = makeContext([msg]);
+    await ctx.runFilter(mkFilter([{ type: 'mark-read' }], { type: 'continue' }), msg, null);
+    assert.equal(ctx.calls.length, 1);
+    assert.equal(ctx.calls[0].type, 'update');
   });
 
   it('add-tag appends to existing tags', async () => {
@@ -640,7 +647,8 @@ describe('runFiltersOnFolder', () => {
   it('messages consumed by a move are skipped by later filters', async () => {
     const ctx = makeContext(msgs);
     // Filter 1 moves invoices; filter 2 matches everything remaining.
-    const f1 = mkFilter('f1', invoiceCond, [{ type: 'move', folderId: 'archive' }]);
+    const f1 = mkFilter('f1', invoiceCond, []);
+    f1.ending = { type: 'move', folderId: 'archive' };
     const f2 = mkFilter('f2', allCond,     [{ type: 'mark-read' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox');
 
@@ -652,7 +660,8 @@ describe('runFiltersOnFolder', () => {
 
   it('messages consumed by a delete are skipped by later filters', async () => {
     const ctx = makeContext(msgs);
-    const f1 = mkFilter('f1', invoiceCond, [{ type: 'delete' }]);
+    const f1 = mkFilter('f1', invoiceCond, []);
+    f1.ending = { type: 'delete' };
     const f2 = mkFilter('f2', allCond,     [{ type: 'mark-read' }]);
     await ctx.runFiltersOnFolder([f1, f2], 'inbox');
     const markReadCalls = ctx.calls.filter(c => c.type === 'update');
@@ -663,7 +672,8 @@ describe('runFiltersOnFolder', () => {
     const ctx = makeContext(msgs);
     // In dry-run no actions execute, and every matching filter is reported.
     // f1 (invoice) matches msgs 1 and 3; f2 (all) matches every message.
-    const f1 = mkFilter('f1', invoiceCond, [{ type: 'move', folderId: 'archive' }]);
+    const f1 = mkFilter('f1', invoiceCond, []);
+    f1.ending = { type: 'move', folderId: 'archive' };
     const f2 = mkFilter('f2', allCond,     [{ type: 'mark-read' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
     assert.equal(result.matched, 3);
@@ -682,10 +692,24 @@ describe('runFiltersOnFolder', () => {
     assert.equal(junkCalls.length, 3);
   });
 
-  it('a rule with stopProcessing true ends processing for later rules', async () => {
+  it('a rule with a move ending ends processing for later rules', async () => {
     const ctx = makeContext(msgs);
     const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
-    f1.stopProcessing = true;
+    f1.ending = { type: 'move', folderId: 'archive' };
+    const f2 = mkFilter('f2', allCond, [{ type: 'mark-junk' }]);
+    const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox');
+    // msg1 & msg3 match f1 (move) so f2 is skipped; msg2 matches only f2.
+    const readCalls = ctx.calls.filter(c => c.props && c.props.read === true);
+    const junkCalls = ctx.calls.filter(c => c.props && c.props.junk === true);
+    assert.equal(readCalls.length, 2);
+    assert.equal(junkCalls.length, 1);
+    assert.equal(result.matched, 3);
+  });
+
+  it('a rule with a stop ending ends processing without moving the message', async () => {
+    const ctx = makeContext(msgs);
+    const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
+    f1.ending = { type: 'stop' };
     const f2 = mkFilter('f2', allCond, [{ type: 'mark-junk' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox');
     // msg1 & msg3 match f1 (stop) so f2 is skipped; msg2 matches only f2.
@@ -694,12 +718,14 @@ describe('runFiltersOnFolder', () => {
     assert.equal(readCalls.length, 2);
     assert.equal(junkCalls.length, 1);
     assert.equal(result.matched, 3);
+    // No move or delete is performed.
+    assert.equal(ctx.calls.some(c => c.type === 'move' || c.type === 'delete'), false);
   });
 
-  it('stopProcessing does not stop later rules in a dry run', async () => {
+  it('move ending does not consume messages in a dry run', async () => {
     const ctx = makeContext(msgs);
     const f1 = mkFilter('f1', invoiceCond, [{ type: 'mark-read' }]);
-    f1.stopProcessing = true;
+    f1.ending = { type: 'move', folderId: 'archive' };
     const f2 = mkFilter('f2', allCond, [{ type: 'mark-junk' }]);
     const result = await ctx.runFiltersOnFolder([f1, f2], 'inbox', null, true);
     const invoiceHit = result.hits.find(h => h.subject === 'Invoice Q1');
@@ -897,33 +923,57 @@ describe('filterAppliesToFolder', () => {
 // ── detectMoveCycle ───────────────────────────────────────────────────────────
 
 describe('detectMoveCycle', () => {
-  const move = (folderId) => ({ type: 'move', folderId });
-  const mkFilter = (id, sourceFolderIds, actions, enabled = true) =>
-    ({ id, name: id, enabled, sourceFolderIds, condition: { type: 'and', children: [] }, actions });
+  const moveEnding = (folderId) => ({ type: 'move', folderId });
+  const mkFilter = (id, sourceFolderIds, ending, enabled = true) =>
+    ({ id, name: id, enabled, sourceFolderIds, condition: { type: 'and', children: [] }, ending });
 
   it('returns null for no filters', () =>
     assert.equal(E.detectMoveCycle([]), null));
-  it('returns null when no filter has a move action', () =>
-    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], [{ type: 'mark-read' }])]), null));
+  it('returns null when no filter has a move ending', () =>
+    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], { type: 'continue' })]), null));
   it('returns null for a single acyclic move', () =>
-    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], [move('B')])]), null));
+    assert.equal(E.detectMoveCycle([mkFilter('f1', ['A'], moveEnding('B'))]), null));
   it('detects a self-loop (destination inside own source scope)', () =>
-    assert.deepEqual(Array.from(E.detectMoveCycle([mkFilter('f1', ['A'], [move('A')])])), ['A', 'A']));
+    assert.deepEqual(Array.from(E.detectMoveCycle([mkFilter('f1', ['A'], moveEnding('A'))])), ['A', 'A']));
   it('detects a two-folder cycle', () => {
-    const f1 = mkFilter('f1', ['A'], [move('B')]);
-    const f2 = mkFilter('f2', ['B'], [move('A')]);
+    const f1 = mkFilter('f1', ['A'], moveEnding('B'));
+    const f2 = mkFilter('f2', ['B'], moveEnding('A'));
     assert.deepEqual(Array.from(E.detectMoveCycle([f1, f2])), ['A', 'B', 'A']);
   });
   it('detects a three-folder cycle', () => {
-    const f1 = mkFilter('f1', ['A'], [move('B')]);
-    const f2 = mkFilter('f2', ['B'], [move('C')]);
-    const f3 = mkFilter('f3', ['C'], [move('A')]);
+    const f1 = mkFilter('f1', ['A'], moveEnding('B'));
+    const f2 = mkFilter('f2', ['B'], moveEnding('C'));
+    const f3 = mkFilter('f3', ['C'], moveEnding('A'));
     assert.deepEqual(Array.from(E.detectMoveCycle([f1, f2, f3])), ['A', 'B', 'C', 'A']);
   });
   it('ignores disabled filters in the graph', () => {
-    const f1 = mkFilter('f1', ['A'], [move('B')]);
-    const f2 = mkFilter('f2', ['B'], [move('A')], false);
+    const f1 = mkFilter('f1', ['A'], moveEnding('B'));
+    const f2 = mkFilter('f2', ['B'], moveEnding('A'), false);
     assert.equal(E.detectMoveCycle([f1, f2]), null);
+  });
+
+  it('focus: a filter with no move ending is never blocked', () => {
+    const looper = mkFilter('looper', ['A'], moveEnding('A')); // self-loop
+    const target = mkFilter('target', ['B'], { type: 'continue' });
+    assert.equal(E.detectMoveCycle([looper, target], 'target'), null);
+  });
+
+  it('focus: ignores a loop caused solely by another filter', () => {
+    const looper = mkFilter('looper', ['A'], moveEnding('B'));
+    const looper2 = mkFilter('looper2', ['B'], moveEnding('A')); // cycle A↔B
+    const target = mkFilter('target', ['C'], moveEnding('D'));   // acyclic
+    assert.equal(E.detectMoveCycle([looper, looper2, target], 'target'), null);
+  });
+
+  it('focus: reports a cycle the focus filter participates in', () => {
+    const f1 = mkFilter('f1', ['A'], moveEnding('B'));
+    const f2 = mkFilter('f2', ['B'], moveEnding('A'));
+    assert.deepEqual(Array.from(E.detectMoveCycle([f1, f2], 'f1')), ['A', 'B', 'A']);
+  });
+
+  it('focus: reports a self-loop on the focus filter', () => {
+    const target = mkFilter('target', ['A'], moveEnding('A'));
+    assert.deepEqual(Array.from(E.detectMoveCycle([target], 'target')), ['A', 'A']);
   });
 });
 
@@ -981,6 +1031,58 @@ describe('migrateFiltersToSourceFolders', () => {
     assert.deepEqual(migrated[0].sourceFolderIds, ['x']);
     assert.equal(migrated[0].accountIds, undefined);
     assert.deepEqual(migrated[1].sourceFolderIds, ['inbox1']);
+  });
+});
+
+// ── migrateFiltersToEnding ────────────────────────────────────────────────────
+
+describe('migrateFiltersToEnding', () => {
+  it('converts a move action into a move ending and strips it from actions', () => {
+    const filters = [
+      { id: '1', name: 'a', enabled: true, actions: [{ type: 'move', folderId: 'X', folderName: 'X' }, { type: 'mark-read' }] },
+    ];
+    const migrated = E.migrateFiltersToEnding(filters);
+    assert.equal(migrated[0].ending.type, 'move');
+    assert.equal(migrated[0].ending.folderId, 'X');
+    assert.equal(migrated[0].ending.folderName, 'X');
+    assert.equal(migrated[0].actions.length, 1);
+    assert.equal(migrated[0].actions[0].type, 'mark-read');
+    assert.equal(migrated[0].stopProcessing, undefined);
+  });
+
+  it('converts a delete action into a delete ending', () => {
+    const filters = [
+      { id: '1', name: 'a', enabled: true, actions: [{ type: 'delete' }] },
+    ];
+    const migrated = E.migrateFiltersToEnding(filters);
+    assert.equal(migrated[0].ending.type, 'delete');
+    assert.equal(migrated[0].actions.length, 0);
+  });
+
+  it('maps a legacy stopProcessing flag to a stop ending', () => {
+    const filters = [
+      { id: '1', name: 'a', enabled: true, actions: [], stopProcessing: true },
+    ];
+    const migrated = E.migrateFiltersToEnding(filters);
+    assert.equal(migrated[0].ending.type, 'stop');
+    assert.equal(migrated[0].stopProcessing, undefined);
+  });
+
+  it('defaults to a continue ending when no terminal is set', () => {
+    const filters = [
+      { id: '1', name: 'a', enabled: true, actions: [] },
+    ];
+    const migrated = E.migrateFiltersToEnding(filters);
+    assert.equal(migrated[0].ending.type, 'continue');
+  });
+
+  it('leaves filters that already have an ending untouched', () => {
+    const filters = [
+      { id: '1', name: 'a', enabled: true, actions: [], ending: { type: 'delete' } },
+      { id: '2', name: 'b', enabled: true, actions: [], ending: { type: 'stop' } },
+    ];
+    const result = E.migrateFiltersToEnding(filters);
+    assert.equal(result, filters);
   });
 });
 

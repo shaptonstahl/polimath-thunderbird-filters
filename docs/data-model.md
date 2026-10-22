@@ -1,9 +1,9 @@
 # Data model
 
 Filters, folders, and the global monitored list are persisted in `storage.local`. A filter is
-scoped to a subset of the monitored folders via `sourceFolderIds`; its `move` action points at a
-destination folder. The background page and the options page each load and (idempotently) migrate
-this data on start.
+scoped to a subset of the monitored folders via `sourceFolderIds`; its `ending` (when a move)
+points at a destination folder. The background page and the options page each load and
+(idempotently) migrate this data on start.
 
 ## Stored filter data
 
@@ -14,18 +14,18 @@ title: Stored filter data
 erDiagram
   FILTER ||--o{ ACTION : contains
   FILTER }o--o{ FOLDER : "scoped to (sourceFolderIds)"
-  ACTION }o--o{ FOLDER : "moves to (folderId)"
+  FILTER }o--o{ FOLDER : "moves to (ending.folderId)"
   FILTER { uuid id  string name  bool enabled }
   FOLDER { string id  string label  string accountId }
-  ACTION { string type  string folderId  string tag }
+  ACTION { string type  string tag }
 ```
 
-**Figure.** A filter owns zero or more actions; both its source scope and a move action reference
-folders by id.
+**Figure.** A filter owns zero or more actions and one mutually-exclusive `ending`
+(continue, move, or delete); a move ending references a destination folder by id.
 
 ## Move graph
 
-A move action draws an edge from each folder in its filter's source scope to its destination.
+A move ending draws an edge from each folder in its filter's source scope to its destination.
 Save-time validation rejects any configuration whose move graph contains a cycle — that is the
 one shape source-folder scoping alone cannot make idempotent.
 

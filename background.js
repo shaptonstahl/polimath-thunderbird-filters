@@ -10,7 +10,8 @@ let cachedMonitoredFolders = [];
 async function loadState() {
   const data = await messenger.storage.local.get(["filters", "monitoredFolders"]);
   const originalFilters = data.filters || [];
-  const filters = await migrateFiltersToSourceFolders(originalFilters);
+  const scoped = await migrateFiltersToSourceFolders(originalFilters);
+  const filters = migrateFiltersToEnding(scoped);
   if (filters !== originalFilters) {
     await messenger.storage.local.set({ filters });
   }

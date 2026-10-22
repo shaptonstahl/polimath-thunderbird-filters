@@ -179,9 +179,6 @@ function evaluateNode(node, message, fullMessage, addressBookEmails = null) {
 async function executeAction(action, message) {
   const id = message.id;
   switch (action.type) {
-    case "move":
-      await messenger.messages.move([id], action.folderId);
-      break;
     case "mark-read":
       await messenger.messages.update(id, { read: true });
       break;
@@ -211,9 +208,6 @@ async function executeAction(action, message) {
     case "mark-junk":
       await messenger.messages.update(id, { junk: true });
       break;
-    case "delete":
-      await messenger.messages.delete([id], false);
-      break;
   }
 }
 
@@ -228,15 +222,27 @@ async function executeActions(actions, message) {
 }
 
 /**
+ * Execute the filter's terminal disposition — one mutually-exclusive outcome of
+ * "continue", "stop", "move", or "delete". "continue" and "stop" mutate nothing;
+ * "stop" merely signals the runner to skip later filters.
+ */
+async function executeEnding(ending, message) {
+  if (!ending || ending.type === "continue" || ending.type === "stop") return;
+  const id = message.id;
+  if (ending.type === "move") {
+    await messenger.messages.move([id], ending.folderId);
+  } else if (ending.type === "delete") {
+    await messenger.messages.delete([id], false);
+  }
+}
+
+/**
  * True when a matching filter should end this message's processing so later
- * filters skip it: it moves or deletes the message, or the rule is marked to
- * stop processing.
+ * filters skip it: its ending stops, moves, or deletes the message.
  */
 function filterEndsProcessing(filter) {
-  if (filter.stopProcessing) return true;
-  return (filter.actions || []).some(a =>
-    a && (a.type === "move" || a.type === "delete")
-  );
+  const t = filter.ending && filter.ending.type;
+  return t === "stop" || t === "move" || t === "delete";
 }
 
 // ── Top-level filter runner ──────────────────────────────────────────────────
@@ -251,6 +257,7 @@ async function runFilter(filter, message, fullMessage, dryRun = false, addressBo
   const matched = evaluateNode(filter.condition, message, fullMessage, addressBookEmails);
   if (matched && !dryRun) {
     await executeActions(filter.actions, message);
+    await executeEnding(filter.ending, message);
   }
   return matched;
 }
@@ -414,51 +421,103 @@ async function migrateFiltersToSourceFolders(filters) {
 }
 
 /**
- * Detect a cycle in the move graph: each enabled filter with a `move` action
+ * Migrate the legacy terminal model — `move`/`delete` actions and the
+ * `stopProcessing` flag — to a single mutually-exclusive `ending` field:
+ * `{ type: "continue" }`, `{ type: "stop" }`, `{ type: "move", folderId,
+ * folderName }`, or `{ type: "delete" }`. Idempotent: filters that already have
+ * an `ending` are left untouched. A legacy `stopProcessing` flag without a
+ * move/delete maps to a `stop` ending.
+ */
+function migrateFiltersToEnding(filters) {
+  let changed = false;
+  const result = (filters || []).map(f => {
+    if (!f || (f.ending && (f.ending.type === "continue" || f.ending.type === "stop" || f.ending.type === "move" || f.ending.type === "delete"))) {
+      return f;
+    }
+    const copy = { ...f };
+    delete copy.stopProcessing;
+    const actions = Array.isArray(copy.actions) ? copy.actions : [];
+    const moveAction = actions.find(a => a && a.type === "move");
+    const deleteAction = actions.find(a => a && a.type === "delete");
+    if (moveAction) {
+      copy.ending = { type: "move", folderId: moveAction.folderId, folderName: moveAction.folderName };
+    } else if (deleteAction) {
+      copy.ending = { type: "delete" };
+    } else if (f.stopProcessing) {
+      copy.ending = { type: "stop" };
+    } else {
+      copy.ending = { type: "continue" };
+    }
+    copy.actions = actions.filter(a => a && a.type !== "move" && a.type !== "delete");
+    changed = true;
+    return copy;
+  });
+  return changed ? result : filters;
+}
+
+/**
+ * Detect a cycle in the move graph: each enabled filter whose ending is a move
  * adds an edge from every folder in its source scope to the move destination.
  * Returns the cycle as an array of folder ids, or null when the graph is acyclic.
+ *
+ * When `focusFilterId` is given, only a cycle that the named filter participates
+ * in is reported; cycles caused solely by other filters are ignored, so editing
+ * or enabling an unrelated filter is not blocked by a pre-existing loop.
  */
-function detectMoveCycle(filters) {
-  const edges = new Map();
+function detectMoveCycle(filters, focusFilterId = null) {
+  const edges = new Map();       // src -> Set<dst>
+  const focusEdges = new Set();  // "src\x00dst" edges contributed by the focus filter
+
   for (const f of filters || []) {
     if (!f || !f.enabled) continue;
     const sources = Array.isArray(f.sourceFolderIds) ? f.sourceFolderIds : [];
-    const dests = (f.actions || [])
-      .filter(a => a && a.type === "move" && a.folderId)
-      .map(a => a.folderId);
+    const dests = (f.ending && f.ending.type === "move" && f.ending.folderId)
+      ? [f.ending.folderId]
+      : [];
+    const isFocus = focusFilterId !== null && f.id === focusFilterId;
     for (const src of sources) {
       for (const dst of dests) {
         if (!edges.has(src)) edges.set(src, new Set());
         edges.get(src).add(dst);
+        if (isFocus) focusEdges.add(src + "\x00" + dst);
       }
     }
   }
 
-  const done = new Set();
-  const path = new Set();
-  const stack = [];
-
-  function walk(node) {
-    if (path.has(node)) {
-      const start = stack.indexOf(node);
-      return stack.slice(start).concat(node);
+  // A move edge src→dst lies on a cycle iff dst can reach src. When focused,
+  // only the focus filter's own edges are considered.
+  function pathFromTo(start, target) {
+    if (start === target) return [start];
+    const parent = new Map();
+    const visited = new Set([start]);
+    const queue = [start];
+    while (queue.length) {
+      const node = queue.shift();
+      for (const next of edges.get(node) || []) {
+        if (visited.has(next)) continue;
+        visited.add(next);
+        parent.set(next, node);
+        if (next === target) {
+          const path = [target];
+          let cur = target;
+          while (cur !== start) {
+            cur = parent.get(cur);
+            path.unshift(cur);
+          }
+          return path;
+        }
+        queue.push(next);
+      }
     }
-    if (done.has(node)) return null;
-    done.add(node);
-    path.add(node);
-    stack.push(node);
-    for (const next of edges.get(node) || []) {
-      const cycle = walk(next);
-      if (cycle) return cycle;
-    }
-    stack.pop();
-    path.delete(node);
     return null;
   }
 
-  for (const node of edges.keys()) {
-    const cycle = walk(node);
-    if (cycle) return cycle;
+  for (const [src, dsts] of edges) {
+    for (const dst of dsts) {
+      if (focusFilterId !== null && !focusEdges.has(src + "\x00" + dst)) continue;
+      const path = pathFromTo(dst, src);
+      if (path) return [src, ...path];
+    }
   }
   return null;
 }

@@ -9,7 +9,7 @@ A Thunderbird MailExtension that replaces the built-in filter editor with a more
 - **Case-sensitivity toggle** — per-condition, defaults to case-insensitive
 - **Nine condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment, Sender in address book
 - **Unicode confusable detection** — detect homoglyph/lookalike characters or match strings that are visually similar (e.g. Cyrillic "а" vs Latin "a")
-- **Nine actions** — Move, Mark read/unread, Add/Remove star, Add/remove tag, Mark as spam, Delete
+- **Seven actions** — Mark read/unread, Add/Remove star, Add/remove tag, Mark as spam — plus a per-rule ending (continue, stop, move to a folder, or delete)
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
 - **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
 - **Automatic filtering** — runs on new mail in any folder you choose to monitor
@@ -124,17 +124,17 @@ AND
 
 | Action | Details |
 |---|---|
-| 📁 Move to folder | Pick any folder from the dropdown |
 | ✅ Mark as read | Sets the read flag |
 | Mark as unread | Clears the read flag |
 | ⭐ Add star | Flags the message with a star |
 | Remove star | Clears the star flag |
 | 🏷️ Add tag | Select a tag from your Thunderbird tag list |
 | Remove tag | Select a tag to remove |
-| 🔥 Mark as spam | Moves to Spam if Thunderbird is configured to do so |
-| 🗑️ Delete (move to trash) | Moves to Trash |
+| 🔥 Mark as spam | Flags the message as junk (does not move it to the Spam folder — see note below) |
 
-Multiple actions can be stacked on a single filter and execute in order. Below the actions, a **Continue / Do not process subsequent rules** selector controls whether later rules still apply to a message after this rule matches.
+Multiple actions can be stacked on a single filter and execute in order. Below the actions, an **After this rule matches** selector picks exactly one ending: **➡️ Continue processing with subsequent rules** (the default), **🛑 Do not process these messages with subsequent rules**, **📁 Move to a folder**, or **🗑️ Delete**. The last three end the message's processing.
+
+> **Mark as spam** only sets the junk flag; it does not move the message to the Spam folder. To have junk moved to the Spam folder automatically, enable it in Thunderbird's Junk settings (Account Settings or General).
 
 ### Folder scoping and monitored folders
 
@@ -143,9 +143,9 @@ Automatic filtering is no longer limited to the Inbox. There are two levels:
 - **Monitored folders** — the global list of folders the extension watches for automatic filtering. Open **Monitored folders…** from the filter-list toolbar to pick them. On first run after upgrading, this is seeded with every account's Inbox, so existing behavior is unchanged.
 - **Source folders** — in each filter's editor, the **Folders** section lists the monitored folders and lets you check the subset that filter applies to. Use **Apply to all monitored folders** to check every one.
 
-A filter only runs on mail that appears in one of its checked folders. This is what keeps the "move to folder" action idempotent: once a message is moved out of a folder, it no longer matches filters scoped to that folder, so it cannot be moved back and forth.
+A filter only runs on mail that appears in one of its checked folders. This is what keeps a "Move to a folder" ending idempotent: once a message is moved out of a folder, it no longer matches filters scoped to that folder, so it cannot be moved back and forth.
 
-> Filters whose move actions would form a loop (e.g. one filter moves Inbox → Bills and another moves Bills → Inbox) are rejected when you save, so a message can never bounce between two folders forever.
+> Filters whose move endings would form a loop (e.g. one filter moves Inbox → Bills and another moves Bills → Inbox) are rejected when you save, so a message can never bounce between two folders forever.
 
 ### Import and export
 
@@ -173,7 +173,7 @@ Every filter row has a **▶** (run) button. The top of the filter list also has
 
 After running, the window shows the folder you scanned and a table of every message that matched any rule, with columns **Subject**, **From**, **To**, and **Rules Applied**. Drag the column borders to resize them; the widths are remembered between sessions. The table scrolls both vertically and horizontally.
 
-**All-match behaviour** — a message can match more than one rule, and the **Rules Applied** column lists every rule whose actions ran, in order. A rule that moves or deletes the message, or whose **Do not process subsequent rules** selector is set, ends that message's filtering so later rules skip it (incoming-mail processing behaves the same way).
+**All-match behaviour** — a message can match more than one rule, and the **Rules Applied** column lists every rule whose actions ran, in order. A rule whose ending moves or deletes the message ends that message's filtering so later rules skip it (incoming-mail processing behaves the same way).
 
 ## Regex
 
@@ -197,6 +197,16 @@ An invalid regex (e.g. an unclosed `[`) evaluates silently to `false` rather tha
 | `.*@(gmail\|yahoo)\.com` | Senders on Gmail or Yahoo |
 | `(?i)urgent` | The word "urgent" in any case (redundant if Aa is off) |
 | `^\s*$` | Empty or whitespace-only body |
+| `^Re:` | Reply subjects (the "Re:" prefix) |
+| `no-?reply@` | Automated "no-reply" senders |
+| `\b(unsubscribe\|opt-?out)\b` | Marketing emails mentioning opt-out |
+| `\b(urgent\|asap)\b` | Subjects flagged as urgent |
+| `^\d{4}-\d{2}-\d{2}` | Subjects that start with a date like `2026-10-22` |
+
+### Resources
+
+- [MDN Regular Expressions Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions) — the definitive guide to the JavaScript regex syntax this extension evaluates.
+- [regex101.com](https://regex101.com/) — an interactive tester with live explanation and reference. It defaults to **PCRE2**, which is *not* this extension's flavor; set the flavor (top-left) to **ECMAScript (JavaScript)** so it matches what Polimath Filters actually runs.
 
 ## Data format
 
@@ -212,7 +222,7 @@ filter object:
   "sourceFolderIds": [],                           // monitored folder IDs the filter applies to; empty = no folders
   "condition": { /* ConditionNode — see below */ },
   "actions": [ /* Action[] — see below */ ],
-  "stopProcessing": false                          // true = don't run later rules after this one matches
+  "ending": { "type": "continue" }                 // how the rule ends — see Ending below
 }
 ```
 
@@ -240,7 +250,6 @@ filter object:
 **Action**
 
 ```jsonc
-{ "type": "move",        "folderId": "...", "folderName": "..." }
 { "type": "mark-read"   }
 { "type": "mark-unread" }
 { "type": "add-star"    }
@@ -248,7 +257,15 @@ filter object:
 { "type": "add-tag",    "tag": "$label1" }
 { "type": "remove-tag", "tag": "$label1" }
 { "type": "mark-junk"   }
-{ "type": "delete"      }
+```
+
+**Ending**
+
+```jsonc
+{ "type": "continue" }                                   // continue to later rules (default)
+{ "type": "stop" }                                       // don't process with later rules
+{ "type": "move",    "folderId": "...", "folderName": "..." }
+{ "type": "delete" }
 ```
 
 Use the **Export** and **Import** buttons in the options page to transfer filters between profiles. Filters are exported as a JSON array in the same format shown above.

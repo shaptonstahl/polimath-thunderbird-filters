@@ -23,7 +23,8 @@ let savedSnapshot = null;     // JSON of editingFilter at last open/save, for di
 async function loadFilters() {
   const data = await messenger.storage.local.get("filters");
   const original = data.filters || [];
-  allFilters = await migrateFiltersToSourceFolders(original);
+  const scoped = await migrateFiltersToSourceFolders(original);
+  allFilters = migrateFiltersToEnding(scoped);
   if (allFilters !== original) {
     await saveFilters();
   }
@@ -172,7 +173,7 @@ function renderFilterList() {
     chk.addEventListener("change", e => {
       e.stopPropagation();
       allFilters[idx].enabled = chk.checked;
-      if (chk.checked && detectMoveCycle(allFilters)) {
+      if (chk.checked && detectMoveCycle(allFilters, allFilters[idx].id)) {
         chk.checked = false;
         allFilters[idx].enabled = false;
         alert("Enabling this filter would create a move loop.");
@@ -236,7 +237,9 @@ function renderFilterList() {
 function openEditor(idx) {
   editingIndex = idx;
   editingFilter = JSON.parse(JSON.stringify(allFilters[idx]));
-  editingFilter.stopProcessing = !!editingFilter.stopProcessing;
+  if (!editingFilter.ending || !editingFilter.ending.type) {
+    editingFilter.ending = { type: "continue" };
+  }
   document.getElementById("editor-title").textContent = "Edit Filter";
   document.getElementById("filter-name").value = editingFilter.name || "";
   document.getElementById("editor-panel").classList.remove("hidden");
@@ -244,7 +247,7 @@ function openEditor(idx) {
   renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
-  renderStopProcessing();
+  renderEnding();
   renderFilterList();
   savedSnapshot = currentFilterState();
   updateSaveButton();
@@ -259,7 +262,7 @@ function openNewEditor() {
     sourceFolderIds: [],
     condition: { type: "and", children: [] },
     actions: [],
-    stopProcessing: false
+    ending: { type: "continue" }
   };
   document.getElementById("editor-title").textContent = "New Filter";
   document.getElementById("filter-name").value = "";
@@ -268,7 +271,7 @@ function openNewEditor() {
   renderSourceFoldersSection();
   renderConditionTree();
   renderActionsList();
-  renderStopProcessing();
+  renderEnding();
   renderFilterList();
   savedSnapshot = currentFilterState();
   updateSaveButton();
@@ -315,10 +318,10 @@ function saveEditor() {
   const candidate = editingIndex === -1
     ? [...allFilters, editingFilter]
     : allFilters.map((f, i) => (i === editingIndex ? editingFilter : f));
-  const cycle = detectMoveCycle(candidate);
+  const cycle = detectMoveCycle(candidate, editingFilter.id);
   if (cycle) {
     const labels = cycle.map(id => folderList.find(f => f.id === id)?.label || id);
-    alert("Move actions form a loop: " + labels.join(" → ") + ". Adjust the move destinations or folder scopes.");
+    alert("Move-to-folder rules form a loop: " + labels.join(" → ") + ". Adjust the move destinations or folder scopes.");
     return;
   }
 
@@ -829,7 +832,6 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
 // ── Actions list rendering ────────────────────────────────────────────────
 
 const ACTION_TYPES = [
-  { value: "move",        label: "📁 Move to folder" },
   { value: "mark-read",   label: "✅ Mark as read", bold: true },
   { value: "mark-unread", label: "Mark as unread" },
   { value: "add-star",    label: "⭐ Add star" },
@@ -837,7 +839,6 @@ const ACTION_TYPES = [
   { value: "add-tag",     label: "🏷️ Add tag" },
   { value: "remove-tag",  label: "Remove tag" },
   { value: "mark-junk",   label: "🔥 Mark as spam" },
-  { value: "delete",      label: "🗑️ Delete (move to trash)" },
 ];
 
 function renderActionsList() {
@@ -848,9 +849,27 @@ function renderActionsList() {
   });
 }
 
-function renderStopProcessing() {
-  const sel = document.getElementById("stop-processing-select");
-  sel.value = editingFilter.stopProcessing ? "stop" : "continue";
+function renderEnding() {
+  const sel = document.getElementById("ending-select");
+  const ending = editingFilter.ending || { type: "continue" };
+  sel.value = ending.type;
+  renderEndingFolder();
+}
+
+function renderEndingFolder() {
+  const wrap = document.getElementById("ending-folder-wrap");
+  const sel = document.getElementById("ending-folder-select");
+  const ending = editingFilter.ending || { type: "continue" };
+  if (ending.type === "move") {
+    wrap.classList.remove("hidden");
+    populateFolderSelect(sel, ending.folderId);
+    if (!ending.folderId && folderList.length) {
+      ending.folderId = folderList[0].id;
+      ending.folderName = folderList[0].label;
+    }
+  } else {
+    wrap.classList.add("hidden");
+  }
 }
 
 function buildActionRow(action, idx) {
@@ -873,10 +892,12 @@ function buildActionRow(action, idx) {
 
   typeSel.addEventListener("change", () => {
     action.type = typeSel.value;
-    delete action.folderId;
-    delete action.folderName;
     delete action.tag;
     renderActionDetail(action, detail);
+    updateSaveButton();
+    if (action.type === "mark-junk") {
+      alert("'Mark as spam' flags the message as junk but does not move it to the Spam folder. To move junk to the Spam folder automatically, enable it in Thunderbird's Junk settings (Account Settings or General).");
+    }
   });
 
   const delBtn = document.createElement("button");
@@ -886,6 +907,7 @@ function buildActionRow(action, idx) {
   delBtn.addEventListener("click", () => {
     editingFilter.actions.splice(idx, 1);
     renderActionsList();
+    updateSaveButton();
   });
 
   row.appendChild(typeSel);
@@ -896,20 +918,7 @@ function buildActionRow(action, idx) {
 
 function renderActionDetail(action, container) {
   container.innerHTML = "";
-  if (action.type === "move") {
-    const sel = document.createElement("select");
-    populateFolderSelect(sel, action.folderId);
-    sel.addEventListener("change", () => {
-      action.folderId = sel.value;
-      const opt = sel.options[sel.selectedIndex];
-      action.folderName = opt ? opt.textContent : "";
-    });
-    if (!action.folderId && folderList.length) {
-      action.folderId = folderList[0].id;
-      action.folderName = folderList[0].label;
-    }
-    container.appendChild(sel);
-  } else if (action.type === "add-tag" || action.type === "remove-tag") {
+  if (action.type === "add-tag" || action.type === "remove-tag") {
     if (tagList.length > 0) {
       const sel = document.createElement("select");
       sel.className = "tag-select";
@@ -1277,8 +1286,8 @@ function openImportModal(meta) {
     metaDiv.appendChild(p);
   }
   renderImportList();
-  const hasMoveActions = importCandidates.some(f => f.actions.some(a => a.type === "move"));
-  document.getElementById("import-move-warn").classList.toggle("hidden", !hasMoveActions);
+  const hasMoveEnding = importCandidates.some(f => f.ending && f.ending.type === "move");
+  document.getElementById("import-move-warn").classList.toggle("hidden", !hasMoveEnding);
   const hasFolderScope = importCandidates.some(f => Array.isArray(f.sourceFolderIds) && f.sourceFolderIds.length > 0);
   document.getElementById("import-folder-scope-warn").classList.toggle("hidden", !hasFolderScope);
   document.getElementById("modal-import-overlay").classList.remove("hidden");
@@ -1441,8 +1450,28 @@ document.getElementById("btn-add-action").addEventListener("click", () => {
   renderActionsList();
 });
 
-document.getElementById("stop-processing-select").addEventListener("change", () => {
-  editingFilter.stopProcessing = document.getElementById("stop-processing-select").value === "stop";
+document.getElementById("ending-select").addEventListener("change", () => {
+  const type = document.getElementById("ending-select").value;
+  if (type === "move") {
+    editingFilter.ending = { type: "move" };
+  } else if (type === "delete") {
+    editingFilter.ending = { type: "delete" };
+  } else if (type === "stop") {
+    editingFilter.ending = { type: "stop" };
+  } else {
+    editingFilter.ending = { type: "continue" };
+  }
+  renderEndingFolder();
+  updateSaveButton();
+});
+
+document.getElementById("ending-folder-select").addEventListener("change", () => {
+  const sel = document.getElementById("ending-folder-select");
+  if (editingFilter.ending && editingFilter.ending.type === "move") {
+    editingFilter.ending.folderId = sel.value;
+    const opt = sel.options[sel.selectedIndex];
+    editingFilter.ending.folderName = opt ? opt.textContent : "";
+  }
   updateSaveButton();
 });
 

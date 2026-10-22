@@ -1,6 +1,10 @@
+![Polimath hero image](assets/polimath_hero_POLIMATH.jpeg)
+
 # Polimath Filters
 
-A Thunderbird MailExtension that replaces the built-in filter editor with a more powerful one. Conditions can be any boolean combination of AND, OR, and NOT groups, and any condition can match against a regular expression.
+A Thunderbird Mail Extension that replaces the built-in filter editor with a more powerful one. Conditions can be any boolean combination of AND, OR, and NOT groups, and any condition can match against a regular expression.
+
+I built this for me. I use this many times daily and depend on it to help manage my inbox. If you find it useful, I'm glad! If you have suggestions, or just appreciate it, please [let me know](mailto:Stephen Haptonstahl<polimath-software@haptonstahl.org>).
 
 ## Features
 

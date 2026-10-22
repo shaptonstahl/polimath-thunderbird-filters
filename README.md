@@ -210,7 +210,7 @@ An invalid regex (e.g. an unclosed `[`) evaluates silently to `false` rather tha
 ### Resources
 
 - [MDN Regular Expressions Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions) — the definitive guide to the JavaScript regex syntax this extension evaluates.
-- [regex101.com](https://regex101.com/?flavor=javascript) — an interactive tester with live explanation and reference. This link preselects the JavaScript flavor, but verify the **Flavor** (top-left) reads **JavaScript** — it must not be PCRE2.
+- [regex101.com](https://regex101.com/?regex=no-%3Freply%40&testString=noreply%40example.com%0Ano-reply%40anotherexample.com%0Aseriouslydontreply%40rude.com&flags=gm&flavor=javascript&delimiter=%2F) — an interactive tester with live explanation and reference. This link preselects the JavaScript flavor, but verify the **Flavor** (top-left) reads **JavaScript** — it must not be PCRE2.
 
 ## Data format
 

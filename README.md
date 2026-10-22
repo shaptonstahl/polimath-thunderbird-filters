@@ -4,7 +4,8 @@
 
 A Thunderbird Mail Extension that replaces the built-in filter editor with a more powerful one. Conditions can be any boolean combination of AND, OR, and NOT groups, and any condition can match against a regular expression.
 
-I built this for me. I use this many times daily and depend on it to help manage my inbox. If you find it useful, I'm glad! If you have suggestions, or just appreciate it, please [let me know](mailto:Stephen Haptonstahl<polimath-software@haptonstahl.org>).
+> [!NOTE]
+> Originally, I built this for me, so I could use regular expressions to filter out spam that uses Unicode to evade other filters. It's evolved, and I depend on it to help manage my inboxes. If you find it useful, I'm glad! If you have suggestions, or just appreciate it, please let me know. polimath-software@haptonstahl.org
 
 ## Features
 
@@ -48,6 +49,7 @@ For development, or to try a change without packaging it:
 
 The extension unloads when Thunderbird restarts.
 
+> [!CAUTION]
 > Don't hand-roll an XPI with `zip -r polimath-filters.xpi .` — that sweeps in `test/`, `docs/`, and `.github/`, and it is easy to omit a file the manifest needs. Releases are built and verified by CI; see [Releases and packaging](#releases-and-packaging).
 
 ## Usage
@@ -106,6 +108,7 @@ AND
 | Has attachment | `yes` or `no` |
 | Sender in address book | `in address book` or `not in address book` — checks the sender's email against all of your Thunderbird address books, including remote/CardDAV sources like Google Contacts |
 
+> [!TIP]
 > CC, BCC, and Body conditions trigger a full message download. For large folders, place these conditions inside an AND group after cheaper header conditions so short-circuit evaluation can skip the download for non-matching messages.
 
 **Operators** (not available for Has attachment or Sender in address book)
@@ -136,8 +139,16 @@ AND
 | Remove tag | Select a tag to remove |
 | 🔥 Mark as spam | Flags the message as junk (does not move it to the Spam folder — see note below) |
 
-Multiple actions can be stacked on a single filter and execute in order. Below the actions, an **After this rule matches** selector picks exactly one ending: **➡️ Continue processing with subsequent rules** (the default), **🛑 Do not process these messages with subsequent rules**, **📁 Move to a folder**, or **🗑️ Delete**. The last three end the message's processing.
+Multiple actions can be stacked on a single filter and execute in order. Below the actions, an **After this rule matches** selector picks exactly one ending:
 
+- **➡️ Continue processing with subsequent rules** (the default)
+- **🛑 Do not process these messages with subsequent rules**
+- **📁 Move to a folder**, or 
+- **🗑️ Delete**. 
+
+The last three end the message's processing.
+
+> [!IMPORTANT]
 > **Mark as spam** only sets the junk flag; it does not move the message to the Spam folder. To have junk moved to the Spam folder automatically, enable it in Thunderbird's Junk settings (Account Settings or General).
 
 ### Folder scoping and monitored folders
@@ -149,6 +160,7 @@ Automatic filtering is no longer limited to the Inbox. There are two levels:
 
 A filter only runs on mail that appears in one of its checked folders. This is what keeps a "Move to a folder" ending idempotent: once a message is moved out of a folder, it no longer matches filters scoped to that folder, so it cannot be moved back and forth.
 
+> [!IMPORTANT]
 > Filters whose move endings would form a loop (e.g. one filter moves Inbox → Bills and another moves Bills → Inbox) are rejected when you save, so a message can never bounce between two folders forever.
 
 ### Import and export

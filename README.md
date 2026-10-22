@@ -206,7 +206,7 @@ An invalid regex (e.g. an unclosed `[`) evaluates silently to `false` rather tha
 ### Resources
 
 - [MDN Regular Expressions Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions) — the definitive guide to the JavaScript regex syntax this extension evaluates.
-- [regex101.com](https://regex101.com/) — an interactive tester with live explanation and reference. It defaults to **PCRE2**, which is *not* this extension's flavor; set the flavor (top-left) to **ECMAScript (JavaScript)** so it matches what Polimath Filters actually runs.
+- [regex101.com](https://regex101.com/?flavor=javascript) — an interactive tester with live explanation and reference. This link preselects the JavaScript flavor, but verify the **Flavor** (top-left) reads **JavaScript** — it must not be PCRE2.
 
 ## Data format
 

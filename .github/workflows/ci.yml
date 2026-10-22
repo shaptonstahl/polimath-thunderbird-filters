@@ -7,7 +7,7 @@ on:
 jobs:
   # ── Run tests on every push and every PR ──────────────────────────────────
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
 
@@ -39,7 +39,7 @@ jobs:
   release:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: write   # needed to create releases and tags
 

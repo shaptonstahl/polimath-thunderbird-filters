@@ -5,12 +5,7 @@ open items for a future session.
 
 ## Open questions
 
-- **regex101 link** — The README currently links `https://regex101.com/?flavor=javascript`
-  (preselects the JavaScript flavor). Stephen asked to "link to a saved expression"; I could
-  not create a real regex101 *saved* expression (needs a regex101 account), so I used the
-  flavor-preset URL instead and offered to swap in a specific saved-expression URL if he
-  provides one. If he sends a `/r/<id>/<version>` URL, replace the regex101 link in
-  `README.md` (Regex → Resources).
+- *(none)*
 
 ## Done this session
 
@@ -24,4 +19,4 @@ open items for a future session.
 
 ## External state (Stephen's actions, not this repo)
 
-- Add-on resubmitted to addons.thunderbird.net (review pending) — no repo action needed.
+- Add-on resubmitted to addons.thunderbird.net — no repo action needed.

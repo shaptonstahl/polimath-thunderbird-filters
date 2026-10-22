@@ -1129,7 +1129,8 @@ async function executeModalRun(dryRun) {
         }
       },
       dryRun,
-      accountId
+      accountId,
+      true
     );
 
     renderRunResults(outcome, dryRun);

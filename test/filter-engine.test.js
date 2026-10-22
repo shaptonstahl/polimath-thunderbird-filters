@@ -1108,4 +1108,11 @@ describe('runFiltersOnFolder — folder scoping', () => {
     const result = await ctx.runFiltersOnFolder([f], 'inbox', null, false, 'a1');
     assert.equal(result.matched, 1);
   });
+
+  it('ignoreScope runs a filter on a folder outside its source scoping', async () => {
+    const ctx = makeContext(msgs);
+    const f = mkFilter('f1', ['other']);
+    const result = await ctx.runFiltersOnFolder([f], 'inbox', null, false, null, true);
+    assert.equal(result.matched, 1);
+  });
 });

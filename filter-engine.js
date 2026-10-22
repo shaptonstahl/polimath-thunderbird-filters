@@ -290,10 +290,12 @@ async function fetchAllMessages(folderId) {
  * where `rules` lists, in firing order, every filter whose actions ran.
  * Only filters that apply to `folderId` run (see `filterAppliesToFolder`);
  * `accountId` is a legacy fallback for `accountIds`-scoped filters.
+ * When `ignoreScope` is true (manual run on an explicit folder), every
+ * enabled filter runs regardless of its source-folder scoping.
  */
-async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null) {
+async function runFiltersOnFolder(filters, folderId, onProgress, dryRun = false, accountId = null, ignoreScope = false) {
   const enabledFilters = filters.filter(f =>
-    f.enabled && filterAppliesToFolder(f, folderId, accountId)
+    f.enabled && (ignoreScope || filterAppliesToFolder(f, folderId, accountId))
   );
   if (enabledFilters.length === 0) return { matched: 0, total: 0, hits: [] };
 

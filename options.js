@@ -315,6 +315,15 @@ function saveEditor() {
     return;
   }
 
+  const regexErrors = collectRegexErrors(editingFilter.condition);
+  if (regexErrors.length > 0) {
+    renderConditionTree();
+    alert("One or more \"matches regex\" conditions have an invalid pattern:\n\n• " +
+      regexErrors.join("\n• ") +
+      "\n\nFix the highlighted conditions and save again.");
+    return;
+  }
+
   const candidate = editingIndex === -1
     ? [...allFilters, editingFilter]
     : allFilters.map((f, i) => (i === editingIndex ? editingFilter : f));
@@ -567,6 +576,27 @@ function makeCaseToggle(node) {
   return label;
 }
 
+// Returns the error message for an invalid regex value, or null if valid/empty.
+function regexError(value) {
+  if (!value) return null;
+  try { new RegExp(value); }
+  catch (err) { return err.message; }
+  return null;
+}
+
+// Walk a condition tree, returning every regex condition whose pattern fails to compile.
+function collectRegexErrors(node, out = []) {
+  if (node.type === "condition" && node.operator === "regex") {
+    const msg = regexError(node.value);
+    if (msg) out.push(msg);
+  } else if (node.type === "not") {
+    collectRegexErrors(node.child, out);
+  } else if (node.type === "and" || node.type === "or") {
+    for (const child of node.children) collectRegexErrors(child, out);
+  }
+  return out;
+}
+
 /**
  * Build a DOM element for a ConditionNode.
  * @param {object} node - the node to render
@@ -778,7 +808,27 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
       const valInput = document.createElement("input");
       valInput.type = "text";
       valInput.value = node.value || "";
-      valInput.addEventListener("input", () => { node.value = valInput.value; });
+
+      const regexWarn = document.createElement("span");
+      regexWarn.className = "regex-warning";
+      regexWarn.textContent = "🚨";
+      regexWarn.title = "";
+      regexWarn.style.display = "none";
+
+      const validateRegexInput = () => {
+        const isRegex = opSel.value === "regex";
+        const msg = isRegex ? regexError(valInput.value) : null;
+        const invalid = isRegex && msg !== null;
+        regexWarn.style.display = invalid ? "" : "none";
+        regexWarn.title = invalid ? "Invalid regular expression: " + msg : "";
+        valInput.classList.toggle("input-invalid", invalid);
+      };
+
+      valInput.addEventListener("input", () => {
+        node.value = valInput.value;
+        validateRegexInput();
+      });
+      valInput.addEventListener("blur", validateRegexInput);
 
       const caseToggle = makeCaseToggle(node);
 
@@ -790,6 +840,7 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
         caseToggle.style.display = hide ? "none" : "";
         caseHelpBtn.style.display = hide ? "none" : "";
         valInput.placeholder = opSel.value === "regex" ? "regular expression" : "value";
+        validateRegexInput();
       };
       opSel.addEventListener("change", updateOperatorState);
       updateOperatorState();
@@ -798,6 +849,7 @@ function buildNodeEl(node, onDelete, onReplace, onDuplicate) {
       header.appendChild(fieldHelpBtn);
       header.appendChild(opSel);
       header.appendChild(opHelpBtn);
+      header.appendChild(regexWarn);
       header.appendChild(valInput);
       header.appendChild(caseToggle);
       header.appendChild(caseHelpBtn);

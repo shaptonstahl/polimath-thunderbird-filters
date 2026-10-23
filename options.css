@@ -278,6 +278,19 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .node select option { background: var(--bg-elevated); color: var(--text); }
 
+/* ── Regex validation indicator ───────────────────────────────────────────── */
+.regex-warning {
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.node input.input-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
 /* ── Actions list ─────────────────────────────────────────────────────────── */
 .action-row {
   display: flex;

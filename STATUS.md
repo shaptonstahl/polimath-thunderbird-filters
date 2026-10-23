@@ -7,6 +7,12 @@ open items for a future session.
 
 - *(none)*
 
+## Desired features
+
+- Friendlier error messages when a "matches regex" condition has an invalid pattern
+  (v3.1.3 added syntax validation, but the 🚨 tooltip / save alert currently show the raw
+  JavaScript `RegExp` error text).
+
 ## Done this session
 
 - Released v3.0.0 (all-match + per-rule `stopProcessing`) and v3.1.0 (terminal `ending`

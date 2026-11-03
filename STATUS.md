@@ -1,6 +1,6 @@
 # STATUS
 
-Session-end notes (last updated 2026-10-22). Addressed items are marked done; leave the
+Session-end notes (last updated 2026-11-02). Addressed items are marked done; leave the
 open items for a future session.
 
 ## Open questions
@@ -29,7 +29,11 @@ open items for a future session.
 - Stopped tracking `.codegraph/` (added to `.gitignore`); it remains in the working tree.
 - `STATUS.md` added to the repo (no private info).
 - regex101 link updated to a saved expression (`flavor=javascript` preselected).
+- Added `PRIVACY.md` (plain-language "collects nothing" policy) and a **Privacy** section
+  in `README.md`; pushed to `main` as `0805d94`.
 
 ## External state (Stephen's actions, not this repo)
 
 - Add-on resubmitted to addons.thunderbird.net (review pending) — no repo action needed.
+- Add the privacy policy URL to the addons.thunderbird.net listing:
+  `https://github.com/shaptonstahl/polimath-thunderbird-filters/blob/main/PRIVACY.md`.

@@ -22,6 +22,14 @@ A Thunderbird Mail Extension that replaces the built-in filter editor with a mor
 - **Manual run** — apply any filter (or all filters) to an existing folder
 - **Dry run** — preview how many messages a filter would affect without changing anything
 - **Smart folder scan** — messages moved or deleted by an earlier filter are skipped by later ones; full message content is fetched in parallel batches only when needed
+
+## Privacy
+
+Polimath Filters collects nothing: no accounts, no analytics, no telemetry, and
+no network requests. Email is read only inside Thunderbird, on your computer,
+and filters are stored in Thunderbird's local extension storage. See
+[PRIVACY.md](PRIVACY.md) for the full policy.
+
 ## Installation
 
 ### From addons.thunderbird.net

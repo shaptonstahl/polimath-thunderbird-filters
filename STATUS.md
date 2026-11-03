@@ -35,5 +35,5 @@ open items for a future session.
 ## External state (Stephen's actions, not this repo)
 
 - Add-on resubmitted to addons.thunderbird.net (review pending) — no repo action needed.
-- Add the privacy policy URL to the addons.thunderbird.net listing:
+- Privacy policy URL added to the addons.thunderbird.net listing (done 2026-11-02):
   `https://github.com/shaptonstahl/polimath-thunderbird-filters/blob/main/PRIVACY.md`.

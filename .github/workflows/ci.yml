@@ -21,7 +21,7 @@ jobs:
             exit 1
           }
           shellcheck --version
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh scripts/*/*.sh
 
       # package.json is the single source of truth for the version; manifest.json
       # must stay in sync. Fail loudly so a hand-edit to either file can't drift.

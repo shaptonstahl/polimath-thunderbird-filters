@@ -66,7 +66,7 @@ async function buildFolderList() {
 
 async function loadTagList() {
   try {
-    const tags = await messenger.messages.listTags();
+    const tags = await messenger.messages.tags.list();
     tagList = tags.map(t => ({ key: t.key, label: t.tag, color: t.color }));
   } catch {
     tagList = [];

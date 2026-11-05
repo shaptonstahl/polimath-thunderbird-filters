@@ -13,7 +13,8 @@ npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
 ./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
-shellcheck scripts/*.sh   # Lint shell scripts (CI runs this on every push and PR)
+./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots (mock messenger + headless Chrome)
+shellcheck scripts/*.sh scripts/*/*.sh   # Lint shell scripts (CI runs this on every push and PR)
 ```
 
 `confusables-data.js` is a committed generated file. Regenerate it and commit the result when updating the Unicode data version. The XPI build does **not** regenerate it — CI packages the committed copy as-is, so a stale commit ships stale data.

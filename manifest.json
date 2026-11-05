@@ -7,7 +7,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "polimath-filters@haptonstahl.org",
-      "strict_min_version": "78.0",
+      "strict_min_version": "121.0",
       "data_collection_permissions": {
         "required": ["none"]
       }

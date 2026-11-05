@@ -40,7 +40,7 @@ The extension is [submitted to addons.thunderbird.net](https://addons.thunderbir
 
 1. Download the latest `.xpi` from the [Releases page](https://github.com/shaptonstahl/polimath-thunderbird-filters/releases).
 2. Open Thunderbird.
-3. Open **Tools → Add-on Manager** (or press `Ctrl+Shift+A`).
+3. Open **Tools → Add-ons and Themes** (or press `Ctrl+Shift+A`).
 4. Click the gear icon and choose **Install Add-on From File…**.
 5. Select the downloaded `.xpi`.
 
@@ -51,7 +51,7 @@ This survives a restart. It will not auto-update until the add-on is approved on
 For development, or to try a change without packaging it:
 
 1. Clone this repository.
-2. Open **Tools → Add-on Manager** (`Ctrl+Shift+A`).
+2. Open **Tools → Add-ons and Themes** (`Ctrl+Shift+A`).
 3. Click the gear icon and choose **Debug Add-ons**.
 4. Click **Load Temporary Add-on…** and select `manifest.json` from the repository root.
 
@@ -62,7 +62,7 @@ The extension unloads when Thunderbird restarts.
 
 ## Usage
 
-Open the options page via **Tools → Add-on Options → Polimath Filters**, or click the gear icon next to the extension in the Add-on Manager.
+Open **Tools → Add-ons and Themes** (`Ctrl+Shift+A`) and click the 🔧 **Add-on Options** button on the Polimath Filters card. The editor opens in a new tab.
 
 ### Creating a filter
 

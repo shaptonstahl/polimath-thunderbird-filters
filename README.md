@@ -346,4 +346,8 @@ The packaging step is an explicit list of paths in [`.github/workflows/ci.yml`](
 scripts/verify-xpi.sh polimath-filters-1.10.1.xpi
 ```
 
-CI also runs `shellcheck scripts/*.sh` on every push and pull request.
+CI also runs `shellcheck scripts/*.sh scripts/*/*.sh` on every push and pull request.
+
+## Credits
+
+Reviewed, edited, or generated with deterministic and AI tools.

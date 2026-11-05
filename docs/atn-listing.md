@@ -5,8 +5,9 @@ Developer Hub "Edit Listing" page. ATN's description field accepts a limited HTM
 (`<b>`, `<i>`, `<a>`, `<ul>`, `<ol>`, `<li>`, `<code>`, `<blockquote>`), not Markdown, so
 the description is given below in that form.
 
-Screenshots live in `assets/screenshots/` and are regenerated with
-`scripts/screenshot-harness/take-screenshots.sh`.
+Screenshots live in `assets/screenshots/`. `01`-`06` are regenerated with
+`scripts/screenshot-harness/take-screenshots.sh`; `00-entry-point.png` is a real
+Thunderbird window and must be recaptured by hand if the Add-ons Manager changes.
 
 ## Summary (250 characters max)
 
@@ -18,8 +19,7 @@ Replaces Thunderbird's filter editor with one that supports regular expressions,
 <b>Polimath Filters</b> is a more powerful filter editor for Thunderbird. Conditions can be any combination of AND, OR, and NOT groups, any condition can match a regular expression, and two operators catch phishing that uses lookalike Unicode characters (for example a Cyrillic "а" in "pаypal").
 
 <b>Where to find it</b>
-Polimath Filters has no toolbar button. Open its editor from <b>Tools → Add-ons and Themes</b> (Ctrl+Shift+A), then click the 🔧 <b>Add-on Options</b> button on the Polimath Filters card. The editor opens in a new tab.
-Everything happens in that tab. Click <b>? Instructions</b> at any time for in-app help, and hover any <b>?</b> icon for help on that control.
+Polimath Filters has no toolbar button. Open its editor from <b>Tools → Add-ons and Themes</b> (Ctrl+Shift+A), then click the wrench icon (<b>Add-on Options</b>) on the Polimath Filters card. The editor opens in a new tab. Everything happens in that tab. Click <b>? Instructions</b> at any time for in-app help, and hover any <b>?</b> icon for help on that control.
 
 <b>Getting started</b>
 <ol>
@@ -47,6 +47,9 @@ Everything happens in that tab. Click <b>? Instructions</b> at any time for in-a
 <li>Body, CC, and BCC conditions need the full message, so they are slower on large folders.</li>
 </ul>
 
+<b>Compatibility</b>
+Requires Thunderbird 121 or later. Most recently tested on Thunderbird 159.0.
+
 <b>Privacy</b>
 Polimath Filters collects nothing: no accounts, no analytics, no network requests. Mail is read only inside Thunderbird on your computer, and filters are stored in Thunderbird's local extension storage.
 
@@ -59,6 +62,7 @@ Upload in this order. The first one is the listing's lead image.
 
 | File | Caption |
 |---|---|
+| `00-entry-point.png` | Where to find it: in Tools → Add-ons and Themes, click the wrench (Add-on Options) on the Polimath Filters card. |
 | `01-filter-list.png` | The filter list. Toggle, reorder, run, or delete filters; the buttons at the top open folder monitoring, import/export, and instructions. |
 | `02-editor-regex-and-not.png` | A filter combining a regular expression with a NOT group, two actions, and a move-to-folder ending. |
 | `03-editor-confusables.png` | Catching lookalike-character phishing: an OR group of "has confusable character" and "confusable with paypal". |

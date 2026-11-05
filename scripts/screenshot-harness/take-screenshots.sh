@@ -2,6 +2,7 @@
 # Regenerates the addons.thunderbird.net listing screenshots in assets/screenshots/.
 # Serves options.html with a mock `messenger` (mock.js) and a state driver (setup.js),
 # then captures each state with headless Chrome. Requires python3 and google-chrome.
+# 00-entry-point.png is a real Thunderbird window, captured by hand; this script leaves it alone.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"

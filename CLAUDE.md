@@ -13,7 +13,7 @@ npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
 ./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
-./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots (mock messenger + headless Chrome)
+./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots 01-06 (00-entry-point.png is captured by hand)
 shellcheck scripts/*.sh scripts/*/*.sh   # Lint shell scripts (CI runs this on every push and PR)
 ```
 

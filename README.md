@@ -32,6 +32,10 @@ and filters are stored in Thunderbird's local extension storage. See
 
 ## Installation
 
+### Compatibility
+
+Requires **Thunderbird 121 or later** (desktop). Most recently tested on Thunderbird 159.0. There is no upper version limit; the extension uses Manifest V2, which current Thunderbird still supports.
+
 ### From addons.thunderbird.net
 
 The extension is [submitted to addons.thunderbird.net](https://addons.thunderbird.net/en-US/thunderbird/addon/polimath-filters/) and **awaiting review**. Once it is approved this will be the recommended route, since it brings automatic updates. Until then, use a release XPI.
@@ -62,7 +66,9 @@ The extension unloads when Thunderbird restarts.
 
 ## Usage
 
-Open **Tools → Add-ons and Themes** (`Ctrl+Shift+A`) and click the 🔧 **Add-on Options** button on the Polimath Filters card. The editor opens in a new tab.
+Open **Tools → Add-ons and Themes** (`Ctrl+Shift+A`) and click the 🔧 **Add-on Options** (wrench) button on the Polimath Filters card. The editor opens in a new tab.
+
+![The Polimath Filters card in Add-ons and Themes, with the wrench (Add-on Options) button](assets/screenshots/00-entry-point.png)
 
 ### Creating a filter
 

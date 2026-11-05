@@ -5,13 +5,30 @@ open items for a future session.
 
 ## Open questions
 
-- *(none)*
+- **Manifest V3: discuss tradeoffs before migrating (not yet).** Thunderbird supports MV3
+  add-ons only from 128 on (~80% confident), so migrating raises the floor from 121 to 128
+  and drops 121-127 (monthly releases, all out of support). Gains: future-proofing against
+  MV2 removal. Main code change: `contacts.list` → `addressBooks.contacts.list`; the
+  background page becomes non-persistent, which `background.js`'s in-memory
+  `cachedMonitoredFolders` must survive.
+
+## To do
+
+- **Release tagging: CI only.** Today `npm version` also creates a local tag, which
+  duplicates the tag CI creates when the version changes on `main`. Make CI the single
+  path (e.g. `npm version --no-git-tag-version`, or `tag-version-prefix`/`git-tag-version=false`
+  in `.npmrc`) and update README + CLAUDE.md, unless a good reason to keep local tags turns up.
+- **Test on Thunderbird 140 ESR.** Only 159.0 has been exercised for real.
 
 ## Desired features
 
-- Friendlier error messages when a "matches regex" condition has an invalid pattern
-  (v3.1.3 added syntax validation, but the 🚨 tooltip / save alert currently show the raw
-  JavaScript `RegExp` error text).
+In priority order:
+
+1. **Menu/toolbar button that opens the editor.** Today the only entry point is the
+   wrench (Add-on Options) in Tools → Add-ons and Themes.
+2. Friendlier error messages when a "matches regex" condition has an invalid pattern
+   (v3.1.3 added syntax validation, but the 🚨 tooltip / save alert currently show the raw
+   JavaScript `RegExp` error text).
 
 ## Done this session
 

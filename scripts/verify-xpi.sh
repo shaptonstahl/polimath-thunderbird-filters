@@ -2,10 +2,10 @@
 #
 # Verify that a built .xpi contains every file the extension references.
 #
-# The packaging step in .github/workflows/ci.yml is a hand-maintained list of
-# paths. This script is the check that the list is complete: it collects every
-# asset referenced by manifest.json and by any HTML page the manifest points
-# at, then asserts each one is present in the archive.
+# The packaged file set in scripts/xpi-files.txt is a hand-maintained allowlist.
+# This script is the check that the list is complete: it collects every asset
+# referenced by manifest.json and by any HTML page the manifest points at, then
+# asserts each one is present in the archive.
 #
 # Usage: scripts/verify-xpi.sh path/to/polimath-filters-X.Y.Z.xpi
 #
@@ -118,7 +118,7 @@ done
 if [[ "$MISSING" -gt 0 ]]; then
     echo "" >&2
     echo "error: $MISSING of $CHECKED referenced file(s) are not in $XPI." >&2
-    echo "Add them to the zip step in .github/workflows/ci.yml." >&2
+    echo "Add them to scripts/xpi-files.txt." >&2
     exit 1
 fi
 

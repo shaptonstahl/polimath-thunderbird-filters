@@ -1,0 +1,18 @@
+# Files and folders packaged into the .xpi, one per line.
+#
+# This is an allowlist, not a glob: a new runtime file is missing from the
+# release until it is added here. Both consumers read this one list —
+#   .github/workflows/ci.yml  builds the .xpi from it
+#   scripts/check-webext.sh   reviews exactly these files with webext-linter
+# `scripts/verify-xpi.sh` runs in CI right after the build and fails the release
+# if a file the extension references is not in the archive.
+
+manifest.json
+confusables-data.js
+filter-engine.js
+background.js
+options.html
+options.js
+options.css
+icons/
+LICENSE

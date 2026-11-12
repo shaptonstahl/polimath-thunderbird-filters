@@ -35,6 +35,18 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # The linter ATN's automated review runs (see scripts/check-webext.sh).
+      # Cloned rather than installed from npm: the tool is not published there.
+      # Its schema cache is re-fetched once a day by design, so CI installs it
+      # fresh each run instead of caching.
+      - name: Run webext-linter (ATN automated review)
+        env:
+          WEBEXT_LINTER_DIR: ${{ runner.temp }}/webext-linter
+        run: |
+          git clone --depth 1 https://github.com/thunderbird/webext-linter.git "$WEBEXT_LINTER_DIR"
+          npm ci --prefix "$WEBEXT_LINTER_DIR" --no-audit --no-fund --silent
+          ./scripts/check-webext.sh
+
   # ── Build .xpi and publish a release — main branch only ──────────────────
   release:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -69,16 +81,7 @@ jobs:
       - name: Build .xpi
         if: steps.changed.outputs.changed == 'true'
         run: |
-          zip -r "polimath-filters-${{ steps.version.outputs.version }}.xpi" \
-            manifest.json \
-            confusables-data.js \
-            filter-engine.js \
-            background.js \
-            options.html \
-            options.js \
-            options.css \
-            icons/ \
-            LICENSE
+          zip -r "polimath-filters-${{ steps.version.outputs.version }}.xpi" -@ < scripts/xpi-files.txt
 
       - name: Verify .xpi contains every referenced file
         if: steps.changed.outputs.changed == 'true'

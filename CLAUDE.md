@@ -12,8 +12,10 @@ npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate conf
 npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
+./scripts/check-webext.sh           # Run Thunderbird's webext-linter, the ATN automated review
 ./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
 ./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots 01-06 (00-entry-point.png is captured by hand)
+pre-commit run --all-files          # Run the hooks over the whole tree (pre-commit install enables them)
 shellcheck scripts/*.sh scripts/*/*.sh   # Lint shell scripts (CI runs this on every push and PR)
 ```
 
@@ -30,6 +32,8 @@ scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
   export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
   verify-xpi.sh              Checks a built .xpi against every path manifest.json and options.html reference
+  check-webext.sh            Runs Thunderbird's webext-linter over the packaged file set
+  xpi-files.txt              The packaged file set: read by the CI zip step and by check-webext.sh
 ```
 
 `confusables-data.js` is loaded before `filter-engine.js` in both the background page and the options page. `filter-engine.js` accesses `CONFUSABLES_MAP` as a direct global; if the file is absent (e.g., in test contexts that don't load it), both confusables operators degrade gracefully.
@@ -73,6 +77,7 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
 - Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix. `package.json` is the single source of truth for the version; `npm version <semver>` bumps it and keeps `manifest.json` in sync via the `version` lifecycle hook. Never hand-edit `manifest.json`'s `version` — run `npm run sync-version` instead.
 - No need to build the xpi manually - it's part of a git action
-- Adding a new file that the extension loads at runtime? Add it to the `zip` step in `.github/workflows/ci.yml`. The packaging list is a hand-maintained allowlist, not a glob. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
+- Adding a new file that the extension loads at runtime? Add it to `scripts/xpi-files.txt`. That allowlist is the single source of truth: the CI zip step builds from it (`zip -r … -@ < scripts/xpi-files.txt`) and `scripts/check-webext.sh` reviews it. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
 - Shell scripts must pass `shellcheck` on its **default** profile — that is the CI gate. House style is `[[ ]]` tests, bare `"$var"` (no `${braces}` except for `:-` defaults), 4-space indent. Do not adopt `-o all` wholesale: SC2250 would require braces everywhere and conflicts with the existing scripts.
-- AMO's validator flags the Thunderbird-only permissions (`messagesRead`, `messagesMove`, `messagesDelete`, `messagesUpdate`, `accountsRead`, `addressBooks`) as invalid. These are warnings from the Firefox schema and are expected — do not remove them.
+- AMO's validator flags the Thunderbird-only permissions (`messagesRead`, `messagesMove`, `messagesDelete`, `messagesUpdate`, `messagesTagsList`, `accountsRead`, `addressBooks`) as invalid. These are warnings from the Firefox schema and are expected — do not remove them.
+- ATN's automated review is Thunderbird's webext-linter, and its `missing-permission` finding is a hard rejection, not a warning: whenever code starts calling a new API, add the permission it needs to `manifest.json` and re-run `scripts/check-webext.sh` (the pre-commit hook does it for you, and CI runs the same review on every push). v3.2.0 was rejected because `options.js` called `messenger.messages.tags.list()` without declaring `messagesTagsList`.

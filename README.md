@@ -304,7 +304,7 @@ Use the **Export** and **Import** buttons in the options page to transfer filter
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18 or later (for running the test suite only — the extension itself has no runtime dependencies)
+- [Node.js](https://nodejs.org/) 18 or later (for running the test suite only — the extension itself has no runtime dependencies). The webext-linter hook below needs 20 or later.
 
 ### Running the tests
 
@@ -315,6 +315,34 @@ npm test
 # or directly:
 node --test test/filter-engine.test.js
 ```
+
+### Automated ATN review (webext-linter)
+
+ATN's automated review is [Thunderbird's `webext-linter`](https://github.com/thunderbird/webext-linter). It is the tool that reports findings like *"The following permissions are required at the locations listed, but are not declared in manifest.json"* — so running it locally turns a rejected submission into a failed commit.
+
+It runs as a [pre-commit](https://pre-commit.com/) hook, installed once per clone:
+
+```sh
+pre-commit install          # enable the hooks for this clone
+pre-commit run --all-files  # run them now
+```
+
+The hook needs Node.js 20+ and a clone of the linter with its dependencies installed:
+
+```sh
+git clone https://github.com/thunderbird/webext-linter.git ~/GitHub/webext-linter
+npm install --prefix ~/GitHub/webext-linter
+```
+
+Point `WEBEXT_LINTER_DIR` elsewhere if the clone lives somewhere else. Run the same review by hand with:
+
+```sh
+./scripts/check-webext.sh
+```
+
+The script stages the packaged file set (see [Releases and packaging](#releases-and-packaging)) into a temp folder and reviews that, so the report is about what actually ships. Its cache lives in `~/.cache/webext-linter/`, and the last full report is kept at `~/.cache/webext-linter/last-report.txt`. The linter re-fetches its schemas once a day, so it needs network access on the first run of a day and fails loudly when it can't reach them — `git commit --no-verify` skips the hook when you're offline.
+
+CI runs the same review on every push and pull request, so the gate holds even in a clone where the hooks were never installed.
 
 ### Project structure
 
@@ -331,6 +359,8 @@ scripts/
   build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
   verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
+  check-webext.sh            Runs Thunderbird's webext-linter (the ATN automated review) on the shipped files
+  xpi-files.txt              The packaged file set — the allowlist CI builds the .xpi from
 test/
   filter-engine.test.js  Node.js unit tests for filter-engine.js
 docs/
@@ -346,7 +376,7 @@ Releases are built by GitHub Actions, not by hand. Pushing to `main` with a chan
 
 `package.json` is the single source of truth for the version. Bump it with `npm version` (which also updates `manifest.json` via the `version` lifecycle hook and commits/tags the change), or run `npm run sync-version` to copy the package version into `manifest.json` after editing it by hand. `scripts/check-version.sh` runs in CI and fails the build if the two ever drift.
 
-The packaging step is an explicit list of paths in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), not a glob — **a new runtime file must be added to that list**, or it will be missing from the XPI. `scripts/verify-xpi.sh` is the guard: it collects every path referenced by `manifest.json` and by the HTML pages the manifest points at, then fails the build if any of them is absent from the archive.
+The packaged file set is an explicit allowlist in [`scripts/xpi-files.txt`](scripts/xpi-files.txt), not a glob — **a new runtime file must be added to that list**, or it will be missing from the XPI. CI builds the archive from that one list (`zip -r … -@ < scripts/xpi-files.txt`), and `scripts/check-webext.sh` reviews exactly the same files. `scripts/verify-xpi.sh` is the guard: it collects every path referenced by `manifest.json` and by the HTML pages the manifest points at, then fails the build if any of them is absent from the archive.
 
 ```sh
 scripts/verify-xpi.sh polimath-filters-1.10.1.xpi

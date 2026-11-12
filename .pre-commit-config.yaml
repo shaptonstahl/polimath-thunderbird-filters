@@ -1,0 +1,16 @@
+# Hooks installed into .git/hooks by `pre-commit install` (run once per clone).
+#
+#   pre-commit install            # enable the hooks for this clone
+#   pre-commit run --all-files    # run them now, across the whole tree
+#
+# The webext-linter hook needs a local clone of Thunderbird's linter; see
+# scripts/check-webext.sh for the setup and WEBEXT_LINTER_DIR.
+repos:
+-   repo: local
+    hooks:
+    -   id: webext-linter
+        name: webext-linter (ATN automated review)
+        entry: scripts/check-webext.sh
+        language: script
+        pass_filenames: false
+        files: \.(js|css|html|json|png)$

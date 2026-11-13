@@ -98,6 +98,13 @@ jobs:
         if: steps.changed.outputs.changed == 'true'
         run: ./scripts/verify-xpi.sh "polimath-filters-${{ steps.version.outputs.version }}.xpi"
 
+      # The linter needs Node 20+; this job has no other use for Node, so pin
+      # it here rather than depending on what the runner image ships.
+      - uses: actions/setup-node@v5
+        if: steps.changed.outputs.changed == 'true'
+        with:
+          node-version: '24'
+
       # The artifact itself gets the review ATN will run on it, not just the
       # staged file set the test job reviews.
       - name: Review the built .xpi with webext-linter

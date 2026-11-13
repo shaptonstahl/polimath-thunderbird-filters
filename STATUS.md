@@ -1,6 +1,6 @@
 # STATUS
 
-Session-end notes (last updated 2026-11-04). Addressed items are marked done; leave the
+Session-end notes (last updated 2026-11-12). Addressed items are marked done; leave the
 open items for a future session.
 
 ## Open questions
@@ -63,7 +63,8 @@ In priority order:
 
 - ATN listing updated with `docs/atn-listing.md` text and the seven screenshots (done
   2026-11-04). v3.2.0 was rejected 2026-11-12 for the undeclared `messagesTagsList`
-  permission; **v3.2.1 needs submitting** once it is pushed and CI publishes the release.
+  permission. v3.2.1 was released by CI the same day and **submitted to ATN on
+  2026-11-12** — review pending.
 
 - Add-on resubmitted to addons.thunderbird.net (review pending) — no repo action needed.
 - Privacy policy URL added to the addons.thunderbird.net listing (done 2026-11-02):

@@ -10,6 +10,10 @@
 # This asserts the inverse: since the last release tag, either no packaged file
 # has changed, or the version has.
 #
+# Runs in CI on every push and PR (after a full-history checkout), and locally as
+# the pre-push hook so the red build never happens. It compares the last release
+# tag against HEAD, so uncommitted work does not trip it.
+#
 # Usage: scripts/check-release-bump.sh
 #
 # Requires: git with tags available (CI checks out with fetch-depth: 0), jq.
@@ -42,7 +46,7 @@ if [[ ${#shipped[@]} -eq 0 ]]; then
     exit 2
 fi
 
-if git diff --quiet "$latest" -- "${shipped[@]}"; then
+if git diff --quiet "$latest" HEAD -- "${shipped[@]}"; then
     echo "OK: no packaged file changed since $latest"
     exit 0
 fi
@@ -51,5 +55,5 @@ echo "error: packaged files changed since $latest, but the version is still $ver
 echo "Those changes would never reach users. Bump the version:" >&2
 echo "  scripts/bump-version.sh patch   # or minor / major" >&2
 echo "" >&2
-git diff --stat "$latest" -- "${shipped[@]}" >&2
+git diff --stat "$latest" HEAD -- "${shipped[@]}" >&2
 exit 1

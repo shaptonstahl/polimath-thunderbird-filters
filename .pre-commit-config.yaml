@@ -1,10 +1,11 @@
-# Hooks installed into .git/hooks by `pre-commit install` (run once per clone;
-# scripts/setup-dev.sh does that and the linter setup below).
+# Installed into .git/hooks by scripts/setup-dev.sh, which also sets up the
+# linter these hooks call:
 #
-#   pre-commit install            # enable the hooks for this clone
-#   pre-commit run --all-files    # run them now, across the whole tree
+#   pre-commit install --hook-type pre-commit --hook-type pre-push
+#   pre-commit run --all-files    # run the commit hooks now, across the tree
 #
-# Hooks run in the order listed, and pre-commit stops at the first failure.
+# Commit hooks run in the order listed and stop at the first failure; the
+# pre-push hook is the release guard described at the bottom.
 repos:
 -   repo: local
     hooks:
@@ -43,3 +44,13 @@ repos:
         language: script
         pass_filenames: false
         files: \.(js|css|html|json|png)$
+
+    # CI fails a push that changes a packaged file without bumping the version
+    # (the release job only fires on a version change, so such a change would
+    # never ship). Same check before the push, so the red build never happens.
+    -   id: release-bump
+        name: packaged changes carry a version bump
+        entry: scripts/check-release-bump.sh
+        language: script
+        pass_filenames: false
+        stages: [pre-push]

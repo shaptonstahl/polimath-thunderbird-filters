@@ -335,12 +335,13 @@ pre-commit run --all-files  # run every hook now
 Run the review on its own with:
 
 ```sh
-./scripts/check-webext.sh
+./scripts/check-webext.sh                        # the packaged file set
+scripts/check-webext.sh polimath-filters-3.2.1.xpi   # a built archive, as built
 ```
 
 The script stages the packaged file set (see [Releases and packaging](#releases-and-packaging)) into a temp folder and reviews that, so the report is about what actually ships. Its cache lives in `~/.cache/webext-linter/`, and the last full report is kept at `~/.cache/webext-linter/last-report.txt`. The linter re-fetches its schemas once a day, so it needs network access on the first run of a day and fails loudly when it can't reach them — `git commit --no-verify` skips the hook when you're offline.
 
-CI runs the same review on every push and pull request, so the gate holds even in a clone where the hooks were never installed.
+A `pre-push` hook also runs `scripts/check-release-bump.sh`, which fails the push if a packaged file changed without a version bump. CI repeats both checks on every push and pull request, so the gates hold even in a clone where the hooks were never installed — and the release job reviews the built `.xpi` itself, not just the staged files.
 
 ### Project structure
 

@@ -7,13 +7,17 @@
 # the locations listed, but are not declared in manifest.json". Running it before
 # a submission turns that rejection into a local failure.
 #
-# The review target is the packaged file set from scripts/xpi-files.txt, staged
-# into a temp folder, not the repository. Two reasons: the linter reports every
-# file a folder holds but the manifest does not reference as "possibly unused"
-# (which the repo, with docs/, test/ and .git/, always would), and it writes its
-# cache and sweep folders into the directory it runs from.
+# With no argument the review target is the packaged file set from
+# scripts/xpi-files.txt, staged into a temp folder rather than the repository.
+# Two reasons: the linter reports every file a folder holds but the manifest does
+# not reference as "possibly unused" (which the repo, with docs/, test/ and
+# .git/, always would), and it writes its cache and sweep folders into the
+# directory it runs from.
 #
-# Usage: scripts/check-webext.sh
+# Usage: scripts/check-webext.sh [path/to/add-on.xpi]
+#
+# With an .xpi, that archive is reviewed as built — CI does this in the release
+# job, so the artifact itself gets the same review ATN will run on it.
 #
 # Requires: Node.js 20 or later, and a clone of the linter with its dependencies
 # installed. Set WEBEXT_LINTER_DIR to point at it; the default is
@@ -48,18 +52,32 @@ fi
 
 # ── Stage the packaged file set ───────────────────────────────────────────
 
-STAGE=$(mktemp -d "${TMPDIR:-/tmp}/webext-linter-stage.XXXXXX")
-trap 'rm -rf "$STAGE"' EXIT
-mkdir -p "$STAGE/xpi"
+if [[ $# -gt 1 ]]; then
+    echo "usage: $0 [path/to/add-on.xpi]" >&2
+    exit 2
+fi
 
-while IFS= read -r path; do
-    [[ -z "$path" || "$path" == "#"* ]] && continue
-    if [[ ! -e "$REPO_ROOT/$path" ]]; then
-        echo "error: $path is listed in scripts/xpi-files.txt but does not exist" >&2
+if [[ -n "${1:-}" ]]; then
+    if [[ ! -f "$1" ]]; then
+        echo "error: no such file: $1" >&2
         exit 2
     fi
-    cp -a "$REPO_ROOT/$path" "$STAGE/xpi/"
-done < "$SCRIPT_DIR/xpi-files.txt"
+    TARGET="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+else
+    STAGE=$(mktemp -d "${TMPDIR:-/tmp}/webext-linter-stage.XXXXXX")
+    trap 'rm -rf "$STAGE"' EXIT
+    mkdir -p "$STAGE/xpi"
+
+    while IFS= read -r path; do
+        [[ -z "$path" || "$path" == "#"* ]] && continue
+        if [[ ! -e "$REPO_ROOT/$path" ]]; then
+            echo "error: $path is listed in scripts/xpi-files.txt but does not exist" >&2
+            exit 2
+        fi
+        cp -a "$REPO_ROOT/$path" "$STAGE/xpi/"
+    done < "$SCRIPT_DIR/xpi-files.txt"
+    TARGET=$STAGE/xpi
+fi
 
 # ── Run the review ────────────────────────────────────────────────────────
 # The run happens inside the cache dir so the linter's own WEBEXT-LINTER-CACHE
@@ -70,7 +88,7 @@ mkdir -p "$CACHE_DIR"
 cd "$CACHE_DIR"
 
 status=0
-node "$LINTER_DIR/verify.js" "$STAGE/xpi" > "$REPORT" 2>&1 || status=$?
+node "$LINTER_DIR/verify.js" "$TARGET" > "$REPORT" 2>&1 || status=$?
 
 case "$status" in
     0)

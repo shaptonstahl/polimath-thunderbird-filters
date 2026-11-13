@@ -68,8 +68,9 @@ fi
 # ── pre-commit hooks ──────────────────────────────────────────────────────
 
 cd "$REPO_ROOT"
-pre-commit install
+pre-commit install --hook-type pre-commit --hook-type pre-push
 
 echo ""
-echo "Done. Every commit now runs: version sync, shellcheck, the tests, and webext-linter."
+echo "Done. Every commit runs: version sync, shellcheck, the tests, and webext-linter."
+echo "Every push runs the packaged-file/version-bump guard."
 echo "Check the whole tree at once with: pre-commit run --all-files"

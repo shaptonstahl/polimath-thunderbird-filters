@@ -61,7 +61,9 @@ In priority order:
   own commit), so `scripts/bump-version.sh patch|minor|major` does the bump and the commit in
   one step. The pre-commit hook repairs `manifest.json` from `package.json` instead of only
   complaining, and `scripts/check-release-bump.sh` fails CI when a packaged file changes
-  without a version bump — nothing shipped can sit on `main` unreleased.
+  without a version bump — nothing shipped can sit on `main` unreleased. That guard also
+  runs as a pre-push hook, and the release job reviews the built `.xpi` with the linter
+  after packaging, so the artifact itself is gated, not just the staged files.
 
 ## External state (Stephen's actions, not this repo)
 

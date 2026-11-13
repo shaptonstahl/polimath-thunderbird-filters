@@ -358,6 +358,7 @@ scripts/
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
   verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
   check-release-bump.sh      Fails when packaged files changed without a version bump
+  bump-version.sh            Bumps package.json + manifest.json and commits, ready to push
   setup-dev.sh               One-time clone setup: installs the pre-commit hooks and the linter clone
   check-webext.sh            Runs Thunderbird's webext-linter (the ATN automated review) on the shipped files
   xpi-files.txt              The packaged file set — the allowlist CI builds the .xpi from
@@ -376,7 +377,7 @@ Releases are built by GitHub Actions, not by hand. Pushing to `main` with a chan
 
 `package.json` is the single source of truth for the version, and `manifest.json` is kept in step automatically: the `npm version` lifecycle hook copies the version across, and the pre-commit hook repairs `manifest.json` from `package.json` if the two are ever edited apart (the repair makes pre-commit report the file as modified, so stage it and commit again). `scripts/check-version.sh` is the CI gate on the same invariant.
 
-`npm version patch|minor|major` bumps both files and commits them. It does **not** create a tag — `.npmrc` sets `git-tag-version=false` — so CI is the only tagger. Push to `main` and the release job builds the XPI, verifies it, and creates the `v<version>` tag and the GitHub release.
+`scripts/bump-version.sh patch|minor|major` bumps both files and commits them. It calls `npm version`, which does **not** create a tag — `.npmrc` sets `git-tag-version=false`, and npm then skips its own commit too, so the script does the commit. CI is the only tagger: push to `main` and the release job builds the XPI, verifies it, and creates the `v<version>` tag and the GitHub release.
 
 The release job only acts when the version changed, so CI also runs `scripts/check-release-bump.sh`: if a file listed in `scripts/xpi-files.txt` changed since the last release tag while the version stayed the same, the build fails and tells you to run `npm version`. A packaged change cannot sit on `main` unreleased.
 

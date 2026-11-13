@@ -49,7 +49,7 @@ fi
 
 echo "error: packaged files changed since $latest, but the version is still $version." >&2
 echo "Those changes would never reach users. Bump the version:" >&2
-echo "  npm version patch    # or minor / major" >&2
+echo "  scripts/bump-version.sh patch   # or minor / major" >&2
 echo "" >&2
 git diff --stat "$latest" -- "${shipped[@]}" >&2
 exit 1

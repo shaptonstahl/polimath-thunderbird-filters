@@ -57,10 +57,11 @@ In priority order:
   CI runs the same review on every push. Pre-commit also runs version sync, shellcheck and
   the tests; `scripts/setup-dev.sh` installs the hooks and the linter clone in one step.
   The linter is deliberately unpinned: we release only when the linter ATN runs today passes.
-- Release tagging is CI-only: `.npmrc` sets `git-tag-version=false`, the pre-commit hook
-  repairs `manifest.json` from `package.json` instead of only complaining, and
-  `scripts/check-release-bump.sh` fails CI when a packaged file changes without a version
-  bump — so nothing shipped can sit on `main` unreleased.
+- Release tagging is CI-only: `.npmrc` sets `git-tag-version=false` (which also stops npm's
+  own commit), so `scripts/bump-version.sh patch|minor|major` does the bump and the commit in
+  one step. The pre-commit hook repairs `manifest.json` from `package.json` instead of only
+  complaining, and `scripts/check-release-bump.sh` fails CI when a packaged file changes
+  without a version bump — nothing shipped can sit on `main` unreleased.
 
 ## External state (Stephen's actions, not this repo)
 

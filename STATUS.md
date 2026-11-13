@@ -15,6 +15,10 @@ open items for a future session.
 ## To do
 
 - **Test on Thunderbird 140 ESR.** Only 159.0 has been exercised for real.
+- **`options.js` has no automated tests** (the whole options page: filter list, condition-tree
+  editor, run-now modal). Deferred 2026-11-12 as low stakes — the v3.2.0 rejection was a
+  permission gap, which the linter catches, not a logic bug a test would have found. Revisit
+  only if something slips past `scripts/check-webext.sh` and CI.
 
 ## Desired features
 

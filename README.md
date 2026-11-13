@@ -320,21 +320,19 @@ node --test test/filter-engine.test.js
 
 ATN's automated review is [Thunderbird's `webext-linter`](https://github.com/thunderbird/webext-linter). It is the tool that reports findings like *"The following permissions are required at the locations listed, but are not declared in manifest.json"* — so running it locally turns a rejected submission into a failed commit.
 
-It runs as a [pre-commit](https://pre-commit.com/) hook, installed once per clone:
+It runs as a [pre-commit](https://pre-commit.com/) hook alongside the version-sync check, `shellcheck` and the test suite. Set up a clone once with:
 
 ```sh
-pre-commit install          # enable the hooks for this clone
-pre-commit run --all-files  # run them now
+./scripts/setup-dev.sh      # installs the hooks and the linter clone
 ```
 
-The hook needs Node.js 20+ and a clone of the linter with its dependencies installed:
+That needs [pre-commit](https://pre-commit.com/#install) and `shellcheck` already installed (the script names the install command if either is missing), Node.js 20+, and network access the first time. It clones the linter to `~/GitHub/webext-linter`; point `WEBEXT_LINTER_DIR` elsewhere to use a different clone. Afterwards:
 
 ```sh
-git clone https://github.com/thunderbird/webext-linter.git ~/GitHub/webext-linter
-npm install --prefix ~/GitHub/webext-linter
+pre-commit run --all-files  # run every hook now
 ```
 
-Point `WEBEXT_LINTER_DIR` elsewhere if the clone lives somewhere else. Run the same review by hand with:
+Run the review on its own with:
 
 ```sh
 ./scripts/check-webext.sh
@@ -359,6 +357,7 @@ scripts/
   build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
   verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
+  setup-dev.sh               One-time clone setup: installs the pre-commit hooks and the linter clone
   check-webext.sh            Runs Thunderbird's webext-linter (the ATN automated review) on the shipped files
   xpi-files.txt              The packaged file set — the allowlist CI builds the .xpi from
 test/

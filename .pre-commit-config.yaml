@@ -1,13 +1,39 @@
-# Hooks installed into .git/hooks by `pre-commit install` (run once per clone).
+# Hooks installed into .git/hooks by `pre-commit install` (run once per clone;
+# scripts/setup-dev.sh does that and the linter setup below).
 #
 #   pre-commit install            # enable the hooks for this clone
 #   pre-commit run --all-files    # run them now, across the whole tree
 #
-# The webext-linter hook needs a local clone of Thunderbird's linter; see
-# scripts/check-webext.sh for the setup and WEBEXT_LINTER_DIR.
+# Hooks run in the order listed, and pre-commit stops at the first failure.
 repos:
 -   repo: local
     hooks:
+    # package.json is the source of truth for the version and npm's `version`
+    # hook keeps manifest.json in sync; this catches a hand-edit to either.
+    -   id: version-sync
+        name: package.json and manifest.json versions match
+        entry: scripts/check-version.sh
+        language: script
+        pass_filenames: false
+        files: ^(package|manifest)\.json$
+
+    # Default-profile shellcheck is the CI gate; keep it identical here.
+    -   id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        files: \.sh$
+
+    -   id: filter-engine-tests
+        name: filter-engine tests
+        entry: npm test --silent
+        language: system
+        pass_filenames: false
+        files: ^(filter-engine\.js|test/.*\.js)$
+
+    # ATN's automated review. The linter is deliberately not pinned: a release
+    # goes out only if the linter ATN is running today passes it. See
+    # scripts/check-webext.sh for the setup and WEBEXT_LINTER_DIR.
     -   id: webext-linter
         name: webext-linter (ATN automated review)
         entry: scripts/check-webext.sh

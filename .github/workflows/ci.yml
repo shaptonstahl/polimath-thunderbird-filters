@@ -37,8 +37,10 @@ jobs:
 
       # The linter ATN's automated review runs (see scripts/check-webext.sh).
       # Cloned rather than installed from npm: the tool is not published there.
-      # Its schema cache is re-fetched once a day by design, so CI installs it
-      # fresh each run instead of caching.
+      # Deliberately unpinned: a release goes out only if the linter ATN runs
+      # today passes it, so tracking upstream main is the point. Its schema
+      # cache is re-fetched once a day by design, so CI installs it fresh each
+      # run instead of caching.
       - name: Run webext-linter (ATN automated review)
         env:
           WEBEXT_LINTER_DIR: ${{ runner.temp }}/webext-linter

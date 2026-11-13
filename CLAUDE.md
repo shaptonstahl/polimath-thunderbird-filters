@@ -12,6 +12,7 @@ npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate conf
 npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
+./scripts/setup-dev.sh             # One-time clone setup: pre-commit hooks + webext-linter
 ./scripts/check-webext.sh           # Run Thunderbird's webext-linter, the ATN automated review
 ./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
 ./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots 01-06 (00-entry-point.png is captured by hand)
@@ -32,6 +33,7 @@ scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
   export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
   verify-xpi.sh              Checks a built .xpi against every path manifest.json and options.html reference
+  setup-dev.sh               One-time setup: installs the pre-commit hooks and the linter clone
   check-webext.sh            Runs Thunderbird's webext-linter over the packaged file set
   xpi-files.txt              The packaged file set: read by the CI zip step and by check-webext.sh
 ```

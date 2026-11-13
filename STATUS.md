@@ -58,6 +58,9 @@ In priority order:
   Added it. Added `scripts/check-webext.sh` + a `pre-commit` hook running Thunderbird's
   `webext-linter` (the same tool ATN's automated review uses) over the packaged file set,
   with `scripts/xpi-files.txt` as the one packaging allowlist shared by CI and the hook.
+  CI runs the same review on every push. Pre-commit also runs version sync, shellcheck and
+  the tests; `scripts/setup-dev.sh` installs the hooks and the linter clone in one step.
+  The linter is deliberately unpinned: we release only when the linter ATN runs today passes.
 
 ## External state (Stephen's actions, not this repo)
 

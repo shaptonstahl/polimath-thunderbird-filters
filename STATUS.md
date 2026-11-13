@@ -14,10 +14,6 @@ open items for a future session.
 
 ## To do
 
-- **Release tagging: CI only.** Today `npm version` also creates a local tag, which
-  duplicates the tag CI creates when the version changes on `main`. Make CI the single
-  path (e.g. `npm version --no-git-tag-version`, or `tag-version-prefix`/`git-tag-version=false`
-  in `.npmrc`) and update README + CLAUDE.md, unless a good reason to keep local tags turns up.
 - **Test on Thunderbird 140 ESR.** Only 159.0 has been exercised for real.
 
 ## Desired features
@@ -61,6 +57,10 @@ In priority order:
   CI runs the same review on every push. Pre-commit also runs version sync, shellcheck and
   the tests; `scripts/setup-dev.sh` installs the hooks and the linter clone in one step.
   The linter is deliberately unpinned: we release only when the linter ATN runs today passes.
+- Release tagging is CI-only: `.npmrc` sets `git-tag-version=false`, the pre-commit hook
+  repairs `manifest.json` from `package.json` instead of only complaining, and
+  `scripts/check-release-bump.sh` fails CI when a packaged file changes without a version
+  bump — so nothing shipped can sit on `main` unreleased.
 
 ## External state (Stephen's actions, not this repo)
 

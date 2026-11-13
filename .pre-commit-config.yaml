@@ -8,12 +8,15 @@
 repos:
 -   repo: local
     hooks:
-    # package.json is the source of truth for the version and npm's `version`
-    # hook keeps manifest.json in sync; this catches a hand-edit to either.
+    # package.json is the source of truth for the version; this repairs
+    # manifest.json from it rather than just complaining, so a hand-edit cannot
+    # leave the two out of step. A repair shows up as "files were modified",
+    # which fails the commit until the fixed manifest.json is staged again.
+    # `npm version` already does this through the version lifecycle hook.
     -   id: version-sync
-        name: package.json and manifest.json versions match
-        entry: scripts/check-version.sh
-        language: script
+        name: manifest.json version follows package.json
+        entry: node scripts/sync-version.js
+        language: system
         pass_filenames: false
         files: ^(package|manifest)\.json$
 

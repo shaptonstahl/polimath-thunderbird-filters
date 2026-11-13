@@ -34,7 +34,8 @@ try {
 }
 
 if (current === pkg.version) {
-  process.stderr.write(`manifest.json already at ${pkg.version}; nothing to do.\n`);
+  // Silent: the pre-commit hook runs this on every package.json/manifest.json
+  // change, and "nothing to do" is the normal case there.
   return;
 }
 

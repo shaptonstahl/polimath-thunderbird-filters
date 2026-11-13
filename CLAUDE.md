@@ -15,6 +15,7 @@ npm run sync-version      # Copy package.json's version into manifest.json
 ./scripts/setup-dev.sh             # One-time clone setup: pre-commit hooks + webext-linter
 ./scripts/check-webext.sh           # Run Thunderbird's webext-linter, the ATN automated review
 ./scripts/check-version.sh          # Fail if package.json and manifest.json versions drift
+./scripts/check-release-bump.sh     # Fail if packaged files changed without a version bump
 ./scripts/screenshot-harness/take-screenshots.sh  # Regenerate ATN listing screenshots 01-06 (00-entry-point.png is captured by hand)
 pre-commit run --all-files          # Run the hooks over the whole tree (pre-commit install enables them)
 shellcheck scripts/*.sh scripts/*/*.sh   # Lint shell scripts (CI runs this on every push and PR)
@@ -33,6 +34,7 @@ scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
   export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
   verify-xpi.sh              Checks a built .xpi against every path manifest.json and options.html reference
+  check-release-bump.sh      Fails when a packaged change lands without a version bump
   setup-dev.sh               One-time setup: installs the pre-commit hooks and the linter clone
   check-webext.sh            Runs Thunderbird's webext-linter over the packaged file set
   xpi-files.txt              The packaged file set: read by the CI zip step and by check-webext.sh
@@ -77,7 +79,8 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - `messenger` is the global Thunderbird WebExtensions API — treat it like `browser` in Firefox extensions.
 - Async/await throughout. No callbacks, no `.then()` chains.
 - `JSON.parse(JSON.stringify(x))` is the intentional deep-clone idiom for filter objects. Do not replace with `structuredClone` without testing that Thunderbird's JS environment supports it.
-- Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix. `package.json` is the single source of truth for the version; `npm version <semver>` bumps it and keeps `manifest.json` in sync via the `version` lifecycle hook. Never hand-edit `manifest.json`'s `version` — run `npm run sync-version` instead.
+- Before a git commit suggest a new version number. First digit is a breaking change, second is a standard feature, third is a bug fix. `package.json` is the single source of truth for the version; `npm version <semver>` bumps it and keeps `manifest.json` in sync via the `version` lifecycle hook. Never hand-edit `manifest.json`'s `version` — the pre-commit hook repairs it from `package.json`, or run `npm run sync-version` yourself.
+- `npm version` deliberately does not create a tag (`.npmrc` sets `git-tag-version=false`): CI is the only tagger, and it creates `v<version>` plus the GitHub release when a push to `main` changes the version. A packaged-file change without a bump fails CI via `scripts/check-release-bump.sh`, so nothing shipped can sit unreleased.
 - No need to build the xpi manually - it's part of a git action
 - Adding a new file that the extension loads at runtime? Add it to `scripts/xpi-files.txt`. That allowlist is the single source of truth: the CI zip step builds from it (`zip -r … -@ < scripts/xpi-files.txt`) and `scripts/check-webext.sh` reviews it. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
 - Shell scripts must pass `shellcheck` on its **default** profile — that is the CI gate. House style is `[[ ]]` tests, bare `"$var"` (no `${braces}` except for `:-` defaults), 4-space indent. Do not adopt `-o all` wholesale: SC2250 would require braces everywhere and conflicts with the existing scripts.

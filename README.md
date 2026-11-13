@@ -357,6 +357,7 @@ scripts/
   build-confusables.js       Fetches confusables.txt and regenerates confusables-data.js
   export-stored-filters.sh   Offline export: extracts filters from a TB profile without Thunderbird running
   verify-xpi.sh              Checks a built .xpi against every file the manifest and options page reference
+  check-release-bump.sh      Fails when packaged files changed without a version bump
   setup-dev.sh               One-time clone setup: installs the pre-commit hooks and the linter clone
   check-webext.sh            Runs Thunderbird's webext-linter (the ATN automated review) on the shipped files
   xpi-files.txt              The packaged file set — the allowlist CI builds the .xpi from
@@ -373,7 +374,11 @@ docs/
 
 Releases are built by GitHub Actions, not by hand. Pushing to `main` with a changed `version` in `manifest.json` builds the XPI, verifies it, and publishes a GitHub release tagged `v<version>`.
 
-`package.json` is the single source of truth for the version. Bump it with `npm version` (which also updates `manifest.json` via the `version` lifecycle hook and commits/tags the change), or run `npm run sync-version` to copy the package version into `manifest.json` after editing it by hand. `scripts/check-version.sh` runs in CI and fails the build if the two ever drift.
+`package.json` is the single source of truth for the version, and `manifest.json` is kept in step automatically: the `npm version` lifecycle hook copies the version across, and the pre-commit hook repairs `manifest.json` from `package.json` if the two are ever edited apart (the repair makes pre-commit report the file as modified, so stage it and commit again). `scripts/check-version.sh` is the CI gate on the same invariant.
+
+`npm version patch|minor|major` bumps both files and commits them. It does **not** create a tag — `.npmrc` sets `git-tag-version=false` — so CI is the only tagger. Push to `main` and the release job builds the XPI, verifies it, and creates the `v<version>` tag and the GitHub release.
+
+The release job only acts when the version changed, so CI also runs `scripts/check-release-bump.sh`: if a file listed in `scripts/xpi-files.txt` changed since the last release tag while the version stayed the same, the build fails and tells you to run `npm version`. A packaged change cannot sit on `main` unreleased.
 
 The packaged file set is an explicit allowlist in [`scripts/xpi-files.txt`](scripts/xpi-files.txt), not a glob — **a new runtime file must be added to that list**, or it will be missing from the XPI. CI builds the archive from that one list (`zip -r … -@ < scripts/xpi-files.txt`), and `scripts/check-webext.sh` reviews exactly the same files. `scripts/verify-xpi.sh` is the guard: it collects every path referenced by `manifest.json` and by the HTML pages the manifest points at, then fails the build if any of them is absent from the archive.
 

@@ -9,7 +9,11 @@ jobs:
   test:
     runs-on: ubuntu-26.04
     steps:
+      # fetch-depth: 0 so the release tags are present for the packaged-file
+      # check below.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       # Runs before the Node setup — it needs neither Node nor the toolchain.
       # Fails loudly if shellcheck is missing rather than skipping the lint,
@@ -27,6 +31,11 @@ jobs:
       # must stay in sync. Fail loudly so a hand-edit to either file can't drift.
       - name: Check version sync
         run: ./scripts/check-version.sh
+
+      # The release job only acts when the version changed, so a packaged-file
+      # change without a bump would land on main and never ship. Fail instead.
+      - name: Check packaged changes carry a version bump
+        run: ./scripts/check-release-bump.sh
 
       - uses: actions/setup-node@v5
         with:

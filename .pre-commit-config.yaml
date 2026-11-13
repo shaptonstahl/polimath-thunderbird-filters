@@ -20,6 +20,7 @@ repos:
         language: system
         pass_filenames: false
         files: ^(package|manifest)\.json$
+        stages: [pre-commit]
 
     # Default-profile shellcheck is the CI gate; keep it identical here.
     -   id: shellcheck
@@ -27,6 +28,7 @@ repos:
         entry: shellcheck
         language: system
         files: \.sh$
+        stages: [pre-commit]
 
     -   id: filter-engine-tests
         name: filter-engine tests
@@ -34,6 +36,7 @@ repos:
         language: system
         pass_filenames: false
         files: ^(filter-engine\.js|test/.*\.js)$
+        stages: [pre-commit]
 
     # ATN's automated review. The linter is deliberately not pinned: a release
     # goes out only if the linter ATN is running today passes it. See
@@ -44,6 +47,7 @@ repos:
         language: script
         pass_filenames: false
         files: \.(js|css|html|json|png)$
+        stages: [pre-commit]
 
     # CI fails a push that changes a packaged file without bumping the version
     # (the release job only fires on a version change, so such a change would

@@ -6,14 +6,44 @@
 
 // ── Field extraction ────────────────────────────────────────────────────────
 
+// Comments go first: Outlook conditional comments wrap whole <style> blocks.
+const NON_BODY_HTML = [
+  /<!--[\s\S]*?-->/g,
+  /<head\b[^>]*>[\s\S]*?<\/head\s*>/gi,
+  /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,
+  /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
+];
+
+// Only known tag names: a generic <[^>]*> would also eat <user@host>, <https://…>
+// and "a < b > c", which are legitimate plain text.
+const LEAKED_HTML_TAG = /<\/?(?:a|b|i|u|s|p|br|hr|div|span|ul|ol|li|img|strong|em|table|thead|tbody|tfoot|tr|td|th|h[1-6]|font|center|blockquote|pre|code|sup|sub|small)\b[^<>]*>/gi;
+
+// Paths and queries are mostly tracking tokens (SendGrid writes %2F as -2F, so
+// every link contains "w-2F"); keeping the host keeps domain matches working.
+const URL_PATH = /\b(https?:\/\/[^\s/?#<>"'\[\]()]+)[^\s<>"'\[\]()]*/gi;
+
+function reduceUrls(text) {
+  return text.replace(URL_PATH, "$1");
+}
+
+function htmlToText(html) {
+  let text = html;
+  for (const re of NON_BODY_HTML) text = text.replace(re, " ");
+  return reduceUrls(text.replace(/<[^>]*>/g, " "));
+}
+
+function plainToText(plain) {
+  return reduceUrls(plain.replace(LEAKED_HTML_TAG, " "));
+}
+
 function extractBodyText(parts) {
   if (!parts) return "";
   let text = "";
   for (const part of parts) {
     if (part.contentType === "text/plain" && part.body) {
-      text += part.body + "\n";
+      text += plainToText(part.body) + "\n";
     } else if (part.contentType === "text/html" && part.body) {
-      text += part.body.replace(/<[^>]*>/g, " ") + "\n";
+      text += htmlToText(part.body) + "\n";
     }
     if (part.parts) {
       text += extractBodyText(part.parts);

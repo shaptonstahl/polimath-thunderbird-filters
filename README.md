@@ -118,7 +118,7 @@ AND
 | To | All To: recipients joined with `, ` |
 | CC | All CC: recipients (requires reading full message) |
 | BCC | All BCC: recipients (requires reading full message) |
-| Body | Full plain-text body; HTML tags are stripped (requires reading full message) |
+| Body | Full message text (requires reading full message). HTML tags, `<style>`/`<script>`/`<head>` blocks and comments are removed; HTML tags that leak into plain-text parts are removed; URLs are shortened to scheme and host (`https://www.paypal.com/signin?…` → `https://www.paypal.com`) so tracking tokens can't match |
 | Has attachment | `yes` or `no` |
 | Sender in address book | `in address book` or `not in address book` — checks the sender's email against all of your Thunderbird address books, including remote/CardDAV sources like Google Contacts |
 

@@ -109,6 +109,121 @@ describe('extractBodyText', () => {
     const result = E.extractBodyText([{ contentType: 'image/png', body: 'binary' }]);
     assert.equal(result, '');
   });
+
+  it('drops <style> block contents from text/html parts', () => {
+    const html = '<html><head><style type="text/css">.mobw-20 {width: 20px;} ul{list-style-position: outside;}</style></head><body><p>Hello</p></body></html>';
+    const result = E.extractBodyText([{ contentType: 'text/html', body: html }]);
+    assert.ok(result.includes('Hello'));
+    assert.ok(!result.includes('mobw-20'));
+    assert.ok(!result.includes('list-style-position'));
+  });
+
+  it('drops <script> block contents from text/html parts', () => {
+    const result = E.extractBodyText([{ contentType: 'text/html', body: '<script>var position = 1;</script><p>Visible</p>' }]);
+    assert.ok(result.includes('Visible'));
+    assert.ok(!result.includes('position'));
+  });
+
+  it('drops <head> contents from text/html parts', () => {
+    const result = E.extractBodyText([{ contentType: 'text/html', body: '<HEAD><title>W2 tracker</title><meta name="x"></HEAD><body>Body text</body>' }]);
+    assert.ok(result.includes('Body text'));
+    assert.ok(!result.includes('W2 tracker'));
+  });
+
+  it('keeps <header> element text (not confused with <head>)', () => {
+    const result = E.extractBodyText([{ contentType: 'text/html', body: '<header>Top banner</header><p>Body</p>' }]);
+    assert.ok(result.includes('Top banner'));
+  });
+
+  it('drops HTML comments, including Outlook conditional comments', () => {
+    const html = '<!--[if mso]><style>.w-2x{}</style><![endif]--><p>Kept</p><!-- position: hidden note -->';
+    const result = E.extractBodyText([{ contentType: 'text/html', body: html }]);
+    assert.ok(result.includes('Kept'));
+    assert.ok(!result.includes('w-2x'));
+    assert.ok(!result.includes('position'));
+  });
+
+  it('matches block tags case-insensitively and with attributes', () => {
+    const result = E.extractBodyText([{ contentType: 'text/html', body: '<STYLE media="screen">.w2{}</STYLE ><p>Text</p>' }]);
+    assert.ok(result.includes('Text'));
+    assert.ok(!result.includes('.w2'));
+  });
+
+  it('strips known HTML tags that leak into text/plain parts (jay2.eml regression)', () => {
+    const plain = 'Note<img height="0" width="0"/>:<br/><ul style="list-style-position: inside;"><li>this is only for owners</li></ul>';
+    const result = E.extractBodyText([{ contentType: 'text/plain', body: plain }]);
+    assert.ok(result.includes('this is only for owners'));
+    assert.ok(!result.includes('list-style-position'));
+    assert.ok(!result.includes('<br/>'));
+  });
+
+  it('keeps angle-bracketed addresses, URLs and comparisons in text/plain parts', () => {
+    const plain = 'From Ann <ann@example.com> see <https://example.com> and note a < b > c';
+    const result = E.extractBodyText([{ contentType: 'text/plain', body: plain }]);
+    assert.ok(result.includes('<ann@example.com>'));
+    assert.ok(result.includes('<https://example.com>'));
+    assert.ok(result.includes('a < b > c'));
+  });
+
+  it('reduces URLs to scheme and host in text/plain parts', () => {
+    const plain = 'Read it: https://us.list-manage.com/kxZAw2_GJX9?e=18efecda2a&c2id=6e1a now';
+    const result = E.extractBodyText([{ contentType: 'text/plain', body: plain }]);
+    assert.ok(result.includes('https://us.list-manage.com'));
+    assert.ok(!result.includes('kxZAw2'));
+    assert.ok(result.includes('now'));
+  });
+
+  it('reduces URLs shown as text in text/html parts to scheme and host', () => {
+    const html = '<p>Listings [https://execthread.com/listings?q&#x3D;all&amp;locations&#x3D;&amp;levels] here</p>';
+    const result = E.extractBodyText([{ contentType: 'text/html', body: html }]);
+    assert.ok(result.includes('https://execthread.com'));
+    assert.ok(!result.includes('locations'));
+    assert.ok(result.includes('here'));
+  });
+
+  it('drops SendGrid-encoded URL paths that contain w-2 (jay2.eml regression)', () => {
+    const plain = '( https://link.skool.com/ls/click?upn=u001.O7wlyw9-2F0OF8thbaD0PL2R0zL6W-2Fv3n-2FMqVAM )';
+    const result = E.extractBodyText([{ contentType: 'text/plain', body: plain }]);
+    assert.ok(result.includes('https://link.skool.com'));
+    assert.ok(!/w-2/i.test(result));
+  });
+
+  it('still lets a body condition match a domain after URL reduction', () => {
+    const cond = { type: 'condition', field: 'body', operator: 'contains', value: 'paypal.com', caseSensitive: false };
+    const fullMessage = { parts: [{ contentType: 'text/plain', body: 'Log in at https://www.paypal.com/signin?token=abc' }] };
+    assert.equal(E.evaluateNode(cond, {}, fullMessage), true);
+  });
+
+  it('still matches genuine recruiter text after body normalization', () => {
+    const fullMessage = { parts: [{ contentType: 'multipart/alternative', parts: [
+      { contentType: 'text/plain', body: 'Hi, W2 only position in Austin. Apply: https://jobs.example.com/apply?id=123' },
+      { contentType: 'text/html', body: '<html><head><style>p{margin:0}</style></head><body><p>Hi, <b>W-2</b> only. Location: Austin</p></body></html>' },
+    ] }] };
+    const c = (v) => ({ type: 'condition', field: 'body', operator: 'contains', value: v, caseSensitive: false });
+    const condition = { type: 'and', children: [
+      { type: 'or', children: [c('w2'), c('w-2')] },
+      { type: 'or', children: [c('position'), c('location')] },
+    ] };
+    assert.equal(E.evaluateNode(condition, {}, fullMessage), true);
+  });
+
+  it('does not let CSS in the HTML part satisfy a body condition (spectrum.eml regression)', () => {
+    const condition = { type: 'and', children: [
+      { type: 'or', children: [
+        { type: 'condition', field: 'body', operator: 'contains', value: 'w2', caseSensitive: false },
+        { type: 'condition', field: 'body', operator: 'contains', value: 'w-2', caseSensitive: false },
+      ] },
+      { type: 'or', children: [
+        { type: 'condition', field: 'body', operator: 'contains', value: 'position', caseSensitive: false },
+        { type: 'condition', field: 'body', operator: 'contains', value: 'location', caseSensitive: false },
+      ] },
+    ] };
+    const fullMessage = { parts: [{ contentType: 'multipart/alternative', parts: [
+      { contentType: 'text/plain', body: 'Channel availability varies by package and location.' },
+      { contentType: 'text/html', body: '<html><head><style>.mobw-20 {width: 20px!important;}\n.aligned-bullets ul{list-style-position: outside!important;}</style></head><body><p>Channel availability varies by package and location.</p></body></html>' },
+    ] }] };
+    assert.equal(E.evaluateNode(condition, {}, fullMessage), false);
+  });
 });
 
 // ── getField ──────────────────────────────────────────────────────────────────

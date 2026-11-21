@@ -1,6 +1,6 @@
 # STATUS
 
-Session-end notes (last updated 2026-11-12). Addressed items are marked done; leave the
+Session-end notes (last updated 2026-11-20). Addressed items are marked done; leave the
 open items for a future session.
 
 ## Open questions
@@ -11,6 +11,24 @@ open items for a future session.
   MV2 removal. Main code change: `contacts.list` → `addressBooks.contacts.list`; the
   background page becomes non-persistent, which `background.js`'s in-memory
   `cachedMonitoredFolders` must survive.
+
+- **Options-page test harness?** (2026-11-20) The import, backup and restore dialogs in
+  `options.js` were verified only by a manual checklist. Is a lightweight browser test harness
+  worth it for future UI changes, or keep testing by hand? See the existing "no automated
+  tests" to-do below.
+- **Keep filter IDs on restore?** Every import or restore assigns new IDs
+  (`doImportSelected`), so a filter can't be tracked across a restore. Keep the original
+  ID when it doesn't conflict?
+- **Where does the uninstall page open?** `runtime.setUninstallURL` (3.5.0) is untested in
+  Thunderbird: a Thunderbird tab or the system browser? Testing needs a removal, so only on
+  a throwaway profile.
+- **Backup cadence.** Backups check staleness at startup and hourly (24 h threshold) plus 3 min
+  after edits. If Thunderbird is rarely open, a day can pass without a backup. Is that right?
+- **`contains-word` operator?** Word-boundary matching currently needs a regex
+  (`\bw-?2s?\b`). A dedicated operator would make the common case easy.
+- **"Recruiter offering W2" filter (Stephen's own):** still substring `contains` with a
+  delete ending. Stephen chose 2026-11-20 to keep it and watch for false positives;
+  revisit if real mail turns up in Trash.
 
 ## To do
 
@@ -30,7 +48,22 @@ In priority order:
    (v3.1.3 added syntax validation, but the 🚨 tooltip / save alert currently show the raw
    JavaScript `RegExp` error text).
 
-## Done this session
+## Done 2026-11-20
+
+- v3.2.2: body matching ignores CSS/`<head>`/`<script>`/comments, HTML tags leaked into
+  plain-text parts, and URL paths (reduced to scheme + host).
+- v3.3.0: schema versions + one migration pipeline (ADR-008); imports upgrade any earlier
+  version with per-filter warnings; schema-1 empty `accountIds` = every account.
+- v3.4.0: opt-in backups as mail messages with rotation and restore (ADR-009). Gmail
+  rotation sends old backups to Trash (tested).
+- v3.5.0: uninstall URL + README "Restoring after removal"; options footer note;
+  `export-stored-filters.sh` rewritten to decode IndexedDB storage and find snap/flatpak/
+  macOS/Windows profiles.
+- ATN listing text and screenshots updated (Stephen pasted them into ATN); screenshot
+  harness fixed (multi-key storage mock, `backup.js` copied).
+- Plan: `docs/plans/2026-11-20-filter-safety.md`.
+
+## Done 2026-11-12
 
 - Released v3.0.0 (all-match + per-rule `stopProcessing`) and v3.1.0 (terminal `ending`
   model: continue / stop / move / delete). `filter.ending` is the single source of truth for

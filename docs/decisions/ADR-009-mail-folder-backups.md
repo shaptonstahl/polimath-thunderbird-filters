@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (target v3.4.0)
+Accepted (v3.4.0)
 
 ## Context
 
@@ -37,3 +37,7 @@ write and read: `messages.import` places a file as a message in any folder, loca
 - With an IMAP account, backups survive uninstall, profile loss and machine changes; filter contents
   live on that mail server (shown to the user when choosing).
 - New permissions `messagesImport` and `accountsFolders`; existing users see a prompt on update.
+- Backups also carry `monitoredFolders`: a fresh install monitors only Inboxes, so restored filters
+  scoped to other folders would otherwise never run.
+- Rotation identifies its own messages by the `.invalid` From address rather than the custom header,
+  because `messages.list` exposes the author but not custom headers before Thunderbird 147.

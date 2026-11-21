@@ -29,7 +29,8 @@ shellcheck scripts/*.sh scripts/*/*.sh   # Lint shell scripts (CI runs this on e
 ```
 confusables-data.js  Generated — sets self.CONFUSABLES_MAP (Unicode TR39 lookalike data)
 filter-engine.js     Pure evaluation logic — no DOM, no Thunderbird API calls (except messenger, injected)
-background.js        Listens for new mail in monitored folders, loads filters, calls filter-engine
+backup.js            Mail-folder backups (ADR-009) — build, rotate, find, read; depends on filter-engine
+background.js        Listens for new mail in monitored folders, loads filters, calls filter-engine; schedules backups
 options.js           Options page UI — filter list, condition tree editor, run-on-folder modal
 scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
@@ -47,6 +48,8 @@ scripts/
 `filter-engine.js` is loaded in both the background page and the options page. It must stay dependency-free and DOM-free so the test suite can run it in Node.js via `vm.runInContext`.
 
 ## Testing approach
+
+`test/backup.test.js` loads `filter-engine.js` then `backup.js` into one VM context with a mock mail folder (`makeBackupContext`). Pass Node's `File` into the context; TextEncoder/btoa are absent there, which is why `backup.js` encodes base64 itself. Compare arrays from the VM with `Array.from(...)` — cross-realm arrays fail `deepEqual`, and cross-realm Sets fail `instanceof` (duck-type them).
 
 The test suite (`test/filter-engine.test.js`) uses Node.js built-in `node:test` and `node:vm`. It creates isolated VM contexts to inject a mock `messenger` object, then loads `filter-engine.js` into that context. This allows testing a browser-extension script in Node without a browser.
 
@@ -70,6 +73,7 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - **`BOOLEAN_FIELDS` Set in `options.js`**: controls which fields render as a yes/no select (no operator, no text input). Add new boolean-style fields here in addition to `getField`.
 - **`NO_VALUE_OPS` Set in `options.js`**: controls which operators hide the value input and case-sensitivity toggle in the condition editor. Add operators that take no value here (e.g., `has-confusable`).
 - **Body normalization** (`extractBodyText`): HTML parts drop comments and `<head>`/`<style>`/`<script>` blocks before tag stripping; plain-text parts strip only a known list of HTML tag names (a generic `<[^>]*>` would eat `<user@host>` and `a < b`); both reduce URLs to scheme + host. Every one of these closed a real false positive — CSS class names, SendGrid's `-2F` URL encoding (every link contains `w-2F`), tracking slugs.
+- **Backups as mail messages** (ADR-009, `backup.js`): opt-in; stored in a folder always named `Polimath Filters Backups` (found by name after a reinstall, since MailFolderIds are session-scoped and every setting is gone) in the account in `backupSettings.accountId`. Messages come from `backups@polimath-filters.invalid`; rotation deletes only messages from that address in that folder. Each Message-ID is unique (`messages.import` rejects duplicates). The envelope is an export envelope plus `monitoredFolders`; restore goes through `startImport` in `options.js`, which also merges those monitored folders. The background never writes a backup of an empty filter list — it would become the day's newest and rotate the real ones out.
 - **Regex caching**: compiled regexes are cached by `pattern\x00caseSensitive` key for the lifetime of the page. The null-byte separator is intentional — it cannot appear in a user-supplied pattern or boolean.
 - **`CONFUSABLES_MAP` global**: set by `confusables-data.js` before `filter-engine.js` loads. `filter-engine.js` guards all accesses with `typeof CONFUSABLES_MAP !== "undefined"` so the engine degrades gracefully when the data file is absent. See `docs/decisions/ADR-004-unicode-confusables-operators.md` for the full design rationale.
 - **`skeletonize` order**: skeletonize before case-folding (`toLowerCase`). Some skeleton targets are uppercase ASCII (e.g., digit `0` → `"O"`); case-folding first would produce wrong codepoints before the map lookup. See ADR-004.
@@ -88,5 +92,5 @@ Do not introduce external test dependencies. Do not mock the DOM — options.js 
 - Adding a new file that the extension loads at runtime? Add it to `scripts/xpi-files.txt`. That allowlist is the single source of truth: the CI zip step builds from it (`zip -r … -@ < scripts/xpi-files.txt`) and `scripts/check-webext.sh` reviews it. `scripts/verify-xpi.sh` runs in CI right after the zip and fails the release if a referenced file was left out — v1.10.0 shipped to AMO without `confusables-data.js` for exactly this reason.
 - The hooks come in two stages: commit hooks (version sync, shellcheck, tests, webext-linter) and a `pre-push` guard (`scripts/check-release-bump.sh`, the same packaged-file/version check CI runs). `scripts/setup-dev.sh` installs both.
 - Shell scripts must pass `shellcheck` on its **default** profile — that is the CI gate. House style is `[[ ]]` tests, bare `"$var"` (no `${braces}` except for `:-` defaults), 4-space indent. Do not adopt `-o all` wholesale: SC2250 would require braces everywhere and conflicts with the existing scripts.
-- AMO's validator flags the Thunderbird-only permissions (`messagesRead`, `messagesMove`, `messagesDelete`, `messagesUpdate`, `messagesTagsList`, `accountsRead`, `addressBooks`) as invalid. These are warnings from the Firefox schema and are expected — do not remove them.
+- AMO's validator flags the Thunderbird-only permissions (`messagesRead`, `messagesMove`, `messagesDelete`, `messagesUpdate`, `messagesTagsList`, `messagesImport`, `accountsRead`, `accountsFolders`, `addressBooks`) as invalid. These are warnings from the Firefox schema and are expected — do not remove them.
 - ATN's automated review is Thunderbird's webext-linter, and its `missing-permission` finding is a hard rejection, not a warning: whenever code starts calling a new API, add the permission it needs to `manifest.json` and re-run `scripts/check-webext.sh` (the pre-commit hook does it for you, and CI runs the same review on every push). v3.2.0 was rejected because `options.js` called `messenger.messages.tags.list()` without declaring `messagesTagsList`.

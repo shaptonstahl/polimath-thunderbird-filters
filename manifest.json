@@ -28,10 +28,12 @@
     "messagesTagsList",
     "accountsRead",
     "addressBooks",
-    "storage"
+    "storage",
+    "messagesImport",
+    "accountsFolders"
   ],
   "background": {
-    "scripts": ["confusables-data.js", "filter-engine.js", "background.js"]
+    "scripts": ["confusables-data.js", "filter-engine.js", "backup.js", "background.js"]
   },
   "options_ui": {
     "page": "options.html",

@@ -4,7 +4,7 @@
   "description": "Thunderbird MailExtension with boolean-tree filters and regex support",
   "license": "Apache-2.0",
   "scripts": {
-    "test": "node --test test/filter-engine.test.js",
+    "test": "node --test test/filter-engine.test.js test/backup.test.js",
     "build:confusables": "node scripts/build-confusables.js",
     "sync-version": "node scripts/sync-version.js",
     "check-version": "bash scripts/check-version.sh",

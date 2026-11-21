@@ -15,6 +15,7 @@ A Thunderbird Mail Extension that replaces the built-in filter editor with a mor
 - **Nine condition fields** — Subject, From, From name, To, CC, BCC, Body, Has attachment, Sender in address book
 - **Unicode confusable detection** — detect homoglyph/lookalike characters or match strings that are visually similar (e.g. Cyrillic "а" vs Latin "a")
 - **Seven actions** — Mark read/unread, Add/Remove star, Add/remove tag, Mark as spam — plus a per-rule ending (continue, stop, move to a folder, or delete)
+- **Automatic backups** — opt-in; saved as messages in a mail folder you choose, kept daily for 30 days then monthly forever, and offered back automatically after a reinstall
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
 - **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
 - **Automatic filtering** — runs on new mail in any folder you choose to monitor
@@ -27,7 +28,9 @@ A Thunderbird Mail Extension that replaces the built-in filter editor with a mor
 
 Polimath Filters collects nothing: no accounts, no analytics, no telemetry, and
 no network requests. Email is read only inside Thunderbird, on your computer,
-and filters are stored in Thunderbird's local extension storage. See
+and filters are stored in Thunderbird's local extension storage. Optional
+backups are saved as messages in a mail account you choose; on a server-based
+account, Thunderbird syncs them to that server. See
 [PRIVACY.md](PRIVACY.md) for the full policy.
 
 ## Installation
@@ -176,6 +179,32 @@ A filter only runs on mail that appears in one of its checked folders. This is w
 
 > [!IMPORTANT]
 > Filters whose move endings would form a loop (e.g. one filter moves Inbox → Bills and another moves Bills → Inbox) are rejected when you save, so a message can never bounce between two folders forever.
+
+### Backups
+
+**Backups…** in the toolbar turns on automatic backups. Each backup is an email
+message, with your filters attached as JSON, in a folder named
+**Polimath Filters Backups** inside the account you choose:
+
+- **Local Folders** keeps backups on this computer.
+- A server-based account (IMAP, Exchange) also keeps them on the server, so they
+  survive a lost profile or a new computer. Your filter definitions are then
+  stored on that server.
+
+A backup is made a few minutes after you change filters or monitored folders,
+and at least daily while Thunderbird runs; nothing is written when nothing
+changed. The newest backup of each day is kept for 30 days, then the newest of
+each month, forever. Rotation only ever deletes the add-on's own backup
+messages.
+
+**Restore from mail…** opens any folder and lists its messages: backups can be
+selected, and anything else is shown with the reason it can't be used. A
+restore goes through Import, so filters from older versions are upgraded and
+anything that didn't carry over is listed. If the add-on starts with no filters
+and finds a Polimath Filters Backups folder, it offers to restore from it.
+
+Removing the add-on deletes its filters. To upgrade, install the new version
+over the old one instead of removing it first.
 
 ### Import and export
 
@@ -349,6 +378,7 @@ A `pre-push` hook also runs `scripts/check-release-bump.sh`, which fails the pus
 manifest.json            Extension manifest (Manifest V2)
 confusables-data.js      Generated — Unicode TR39 confusable character mappings
 filter-engine.js         Pure evaluation and action logic; loaded in both contexts
+backup.js                Mail-folder backups: message building, rotation, restore reading
 background.js            New-mail event listener
 options.html             Options page markup
 options.js               Options page: filter list, condition tree editor, run-now
@@ -365,6 +395,7 @@ scripts/
   xpi-files.txt              The packaged file set — the allowlist CI builds the .xpi from
 test/
   filter-engine.test.js  Node.js unit tests for filter-engine.js
+  backup.test.js         Node.js unit tests for backup.js
 docs/
   architecture.md        Runtime architecture + new-mail main loop
   data-model.md          Storage model and move-graph cycle detection

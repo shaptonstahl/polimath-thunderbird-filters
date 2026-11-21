@@ -15,6 +15,7 @@ let tagList = [];          // [{key, label, color}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
 let importCandidates = []; // filters parsed from an import file, pending selection
 let importWarnings = [];   // per-candidate migration warnings, parallel to importCandidates
+let importMonitoredFolders = []; // monitored folders carried by a backup, merged on import
 let compareIdx = null;     // index into importCandidates currently open in compare modal
 let compareExistingFilter = null; // reference into allFilters for current compare
 let savedSnapshot = null;     // JSON of editingFilter at last open/save, for dirty tracking
@@ -1321,35 +1322,41 @@ function handleImportFile(file) {
       alert("This file does not appear to be a Polimath Filters export.");
       return;
     }
-    const { schema, known } = importSchema(parsed);
-    if (schema > CURRENT_SCHEMA) {
-      alert(`This file was made by Polimath Filters ${parsed.extensionVersion ?? "(a newer version)"}, which uses data format ${schema}. This version reads formats up to ${CURRENT_SCHEMA}. Update the add-on, then import again.`);
-      return;
-    }
-    const valid = parsed.filters.filter(f => f && f.name && f.condition && Array.isArray(f.actions));
-    if (valid.length === 0) { alert("No valid filters found in this file."); return; }
-
-    const notes = [];
-    const skipped = parsed.filters.length - valid.length;
-    if (skipped > 0) notes.push(`${skipped} entr${skipped === 1 ? "y was" : "ies were"} skipped: not a complete filter.`);
-
-    let env = {};
-    try {
-      env = await buildMigrationEnv();
-    } catch (err) {
-      console.error("Polimath Filters: could not read accounts for import", err);
-      notes.push("Could not read your accounts, so folder and tag references were not checked.");
-    }
-    if (!known && valid.some(f => Array.isArray(f.accountIds) && f.accountIds.length === 0)) {
-      notes.push("This file does not say which version made it. Filters with no account limit are treated as running on no accounts (the 2.0.0+ meaning).");
-    }
-
-    const migrated = valid.map(f => migrateFilters([JSON.parse(JSON.stringify(f))], schema, env));
-    importCandidates = migrated.map(r => r.filters[0]);
-    importWarnings = migrated.map(r => r.warnings.map(w => w.message));
-    openImportModal(parsed, notes);
+    await startImport(parsed);
   };
   reader.readAsText(file);
+}
+
+/** Migrate an export or backup envelope and open the import dialog for it. */
+async function startImport(parsed) {
+  const { schema, known } = importSchema(parsed);
+  if (schema > CURRENT_SCHEMA) {
+    alert(`This file was made by Polimath Filters ${parsed.extensionVersion ?? "(a newer version)"}, which uses data format ${schema}. This version reads formats up to ${CURRENT_SCHEMA}. Update the add-on, then import again.`);
+    return;
+  }
+  const valid = parsed.filters.filter(f => f && f.name && f.condition && Array.isArray(f.actions));
+  if (valid.length === 0) { alert("No valid filters found in this file."); return; }
+
+  const notes = [];
+  const skipped = parsed.filters.length - valid.length;
+  if (skipped > 0) notes.push(`${skipped} entr${skipped === 1 ? "y was" : "ies were"} skipped: not a complete filter.`);
+
+  let env = {};
+  try {
+    env = await buildMigrationEnv();
+  } catch (err) {
+    console.error("Polimath Filters: could not read accounts for import", err);
+    notes.push("Could not read your accounts, so folder and tag references were not checked.");
+  }
+  if (!known && valid.some(f => Array.isArray(f.accountIds) && f.accountIds.length === 0)) {
+    notes.push("This file does not say which version made it. Filters with no account limit are treated as running on no accounts (the 2.0.0+ meaning).");
+  }
+
+  const migrated = valid.map(f => migrateFilters([JSON.parse(JSON.stringify(f))], schema, env));
+  importCandidates = migrated.map(r => r.filters[0]);
+  importWarnings = migrated.map(r => r.warnings.map(w => w.message));
+  importMonitoredFolders = Array.isArray(parsed.monitoredFolders) ? parsed.monitoredFolders : [];
+  openImportModal(parsed, notes);
 }
 
 function openImportModal(meta, notes = []) {
@@ -1471,10 +1478,18 @@ async function doImportSelected() {
     allFilters.push(imported);
   });
   await saveFilters();
+  const known = new Set(folderList.map(f => f.id));
+  const added = importMonitoredFolders.filter(id => known.has(id) && !monitoredFolderIds.includes(id));
+  if (added.length) {
+    monitoredFolderIds = [...monitoredFolderIds, ...added];
+    await saveMonitoredFolders();
+  }
   renderFilterList();
   document.getElementById("modal-import-overlay").classList.add("hidden");
   importCandidates = [];
   importWarnings = [];
+  importMonitoredFolders = [];
+  showBackupBanner();
 }
 
 // ── Compare ───────────────────────────────────────────────────────────────
@@ -1648,10 +1663,230 @@ document.getElementById("compare-done").addEventListener("click", () => {
   document.getElementById("modal-compare-overlay").classList.add("hidden");
 });
 
+// ── Backups ───────────────────────────────────────────────────────────────
+
+const SERVER_ACCOUNT_TYPES = new Set(["imap", "ews", "owl", "graph"]);
+let backupAccounts = [];   // [{id, name, type}] for the backup account selector
+let restoreRows = [];      // classified messages of the folder open in the restore dialog
+
+async function getBackupSettings() {
+  const { backupSettings = {} } = await messenger.storage.local.get("backupSettings");
+  return backupSettings;
+}
+
+async function setBackupSettings(patch) {
+  const current = await getBackupSettings();
+  await messenger.storage.local.set({ backupSettings: { ...current, ...patch } });
+}
+
+function bannerButton(label, cls, onClick) {
+  const btn = document.createElement("button");
+  btn.className = cls;
+  btn.textContent = label;
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+async function showBackupBanner() {
+  const banner = document.getElementById("backup-banner");
+  banner.innerHTML = "";
+  banner.classList.add("hidden");
+  const text = document.createElement("span");
+
+  if (allFilters.length === 0) {
+    try {
+      for (const folder of await findBackupFolders()) {
+        const backups = await listOwnBackups(folder.id);
+        if (!backups.length) continue;
+        const where = folderList.find(f => f.id === folder.id)?.label || BACKUP_FOLDER_NAME;
+        text.textContent = `You have no filters, but ${backups.length} backup${backups.length === 1 ? "" : "s"} were found in “${where}”.`;
+        banner.append(text, bannerButton("Restore…", "btn-primary", () => openRestoreModal(folder.id)));
+        banner.classList.remove("hidden");
+        return;
+      }
+    } catch (err) {
+      console.error("Polimath Filters: backup search failed", err);
+    }
+  }
+
+  const settings = await getBackupSettings();
+  if (!settings.enabled && !settings.promptDismissed) {
+    text.textContent = "Removing this add-on deletes your filters. Turn on automatic backups so you can always get them back.";
+    banner.append(
+      text,
+      bannerButton("Set up backups…", "btn-primary", openBackupModal),
+      bannerButton("Not now", "btn-ghost", async () => {
+        await setBackupSettings({ promptDismissed: true });
+        banner.classList.add("hidden");
+      }),
+    );
+    banner.classList.remove("hidden");
+  }
+}
+
+function updateServerNote() {
+  const account = backupAccounts.find(a => a.id === document.getElementById("backup-account").value);
+  document.getElementById("backup-server-note").classList.toggle("hidden", !SERVER_ACCOUNT_TYPES.has(account?.type));
+}
+
+async function refreshBackupStatus() {
+  const { backupState = {} } = await messenger.storage.local.get("backupState");
+  const parts = [];
+  parts.push(backupState.lastBackupAt
+    ? `Last backup: ${new Date(backupState.lastBackupAt).toLocaleString()}.`
+    : "No backup made yet.");
+  if (backupState.lastError) parts.push(`Last attempt failed: ${backupState.lastError}`);
+  document.getElementById("backup-status").textContent = parts.join(" ");
+}
+
+async function openBackupModal() {
+  const settings = await getBackupSettings();
+  backupAccounts = (await messenger.accounts.list(false)).map(a => ({ id: a.id, name: a.name, type: a.type }));
+  const select = document.getElementById("backup-account");
+  select.innerHTML = "";
+  for (const a of backupAccounts) {
+    const opt = document.createElement("option");
+    opt.value = a.id;
+    opt.textContent = a.type === "none" ? `${a.name} (on this computer only)` : a.name;
+    select.appendChild(opt);
+  }
+  const firstSource = folderList.find(f => allFilters.some(flt => (flt.sourceFolderIds || []).includes(f.id)));
+  select.value = settings.accountId || firstSource?.accountId || backupAccounts[0]?.id || "";
+  document.getElementById("backup-enabled").checked = !!settings.enabled;
+  updateServerNote();
+  await refreshBackupStatus();
+  document.getElementById("modal-backup-overlay").classList.remove("hidden");
+}
+
+async function saveBackupModal() {
+  const enabled = document.getElementById("backup-enabled").checked;
+  const accountId = document.getElementById("backup-account").value;
+  await setBackupSettings({ enabled, accountId, promptDismissed: true });
+  document.getElementById("modal-backup-overlay").classList.add("hidden");
+  showBackupBanner();
+}
+
+async function backupNow() {
+  const accountId = document.getElementById("backup-account").value;
+  const status = document.getElementById("backup-status");
+  status.textContent = "Backing up…";
+  try {
+    const result = await runBackup(allFilters, monitoredFolderIds, {
+      accountId,
+      extensionVersion: messenger.runtime.getManifest().version,
+      force: true,
+    });
+    await refreshBackupStatus();
+    if (result.removed) status.textContent += ` ${result.removed} older backup${result.removed === 1 ? "" : "s"} rotated out.`;
+  } catch (err) {
+    status.textContent = `Backup failed: ${err.message || err}`;
+  }
+}
+
+async function openRestoreModal(folderId = null) {
+  const select = document.getElementById("restore-folder");
+  select.innerHTML = "";
+  for (const f of folderList) {
+    const opt = document.createElement("option");
+    opt.value = f.id;
+    opt.textContent = f.label;
+    select.appendChild(opt);
+  }
+  let initial = folderId;
+  if (!initial) {
+    try { initial = (await findBackupFolders())[0]?.id ?? null; } catch { initial = null; }
+  }
+  select.value = initial || folderList[0]?.id || "";
+  document.getElementById("modal-backup-overlay").classList.add("hidden");
+  document.getElementById("modal-restore-overlay").classList.remove("hidden");
+  await loadRestoreList();
+}
+
+async function loadRestoreList() {
+  const list = document.getElementById("restore-list");
+  const folderId = document.getElementById("restore-folder").value;
+  list.innerHTML = "";
+  const loading = document.createElement("li");
+  loading.textContent = "Reading messages…";
+  list.appendChild(loading);
+  document.getElementById("restore-confirm").disabled = true;
+  try {
+    restoreRows = await classifyFolderMessages(folderId);
+  } catch (err) {
+    restoreRows = [];
+    list.innerHTML = "";
+    const li = document.createElement("li");
+    li.textContent = `Could not read this folder: ${err.message || err}`;
+    list.appendChild(li);
+    return;
+  }
+  list.innerHTML = "";
+  if (!restoreRows.length) {
+    const li = document.createElement("li");
+    li.textContent = "This folder has no messages.";
+    list.appendChild(li);
+    return;
+  }
+  let firstValid = true;
+  restoreRows.forEach((row, idx) => {
+    const li = document.createElement("li");
+    li.className = "restore-item" + (row.ok ? "" : " restore-invalid");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "restore-pick";
+    radio.id = `restore-${idx}`;
+    radio.value = String(idx);
+    radio.disabled = !row.ok;
+    if (row.ok && firstValid) { radio.checked = true; firstValid = false; }
+    radio.addEventListener("change", updateRestoreConfirm);
+    const label = document.createElement("label");
+    label.htmlFor = radio.id;
+    label.className = "import-item-name";
+    const count = row.ok ? ` · ${row.envelope.filters.length} filter${row.envelope.filters.length === 1 ? "" : "s"}` : "";
+    label.textContent = `${new Date(row.date).toLocaleString()} · ${row.subject || "(no subject)"}${count}`;
+    li.append(radio, label);
+    if (!row.ok) {
+      const reason = document.createElement("div");
+      reason.className = "restore-reason";
+      reason.textContent = row.reason;
+      li.appendChild(reason);
+    }
+    list.appendChild(li);
+  });
+  updateRestoreConfirm();
+}
+
+function updateRestoreConfirm() {
+  document.getElementById("restore-confirm").disabled = !document.querySelector('input[name="restore-pick"]:checked');
+}
+
+async function confirmRestore() {
+  const picked = document.querySelector('input[name="restore-pick"]:checked');
+  const row = picked && restoreRows[Number(picked.value)];
+  if (!row?.ok) return;
+  document.getElementById("modal-restore-overlay").classList.add("hidden");
+  await startImport(row.envelope);
+}
+
+document.getElementById("btn-backups").addEventListener("click", openBackupModal);
+document.getElementById("backup-account").addEventListener("change", updateServerNote);
+document.getElementById("backup-save").addEventListener("click", saveBackupModal);
+document.getElementById("backup-now").addEventListener("click", backupNow);
+document.getElementById("backup-restore").addEventListener("click", () => openRestoreModal());
+document.getElementById("backup-close").addEventListener("click", () => {
+  document.getElementById("modal-backup-overlay").classList.add("hidden");
+});
+document.getElementById("restore-folder").addEventListener("change", loadRestoreList);
+document.getElementById("restore-confirm").addEventListener("click", confirmRestore);
+document.getElementById("restore-cancel").addEventListener("click", () => {
+  document.getElementById("modal-restore-overlay").classList.add("hidden");
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────
 
 (async () => {
   initRunColumnResizers();
   await Promise.all([loadFilters(), buildFolderList(), loadMonitoredFolders(), loadTagList(), loadRunColWidths()]);
   renderFilterList();
+  await showBackupBanner();
 })();

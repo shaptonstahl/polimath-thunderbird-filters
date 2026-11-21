@@ -554,6 +554,27 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
 
 .run-col-resizer:hover { background: var(--accent-glow); opacity: .35; }
 
+/* ── Backups ─────────────────────────────────────────────────────────────── */
+.backup-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--node-border-or);
+  border-radius: var(--radius);
+  background: var(--node-bg-or);
+  font-size: 13px;
+}
+.backup-banner span { flex: 1; min-width: 200px; }
+.backup-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.backup-row select { flex: 1; }
+.restore-invalid { opacity: .55; }
+.restore-reason { flex-basis: 100%; padding-left: 22px; font-size: 12px; }
+.check-list li.restore-item { flex-wrap: wrap; }
+
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 

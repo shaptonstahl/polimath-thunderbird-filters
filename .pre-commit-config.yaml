@@ -35,7 +35,7 @@ repos:
         entry: npm test --silent
         language: system
         pass_filenames: false
-        files: ^(filter-engine\.js|test/.*\.js)$
+        files: ^(filter-engine\.js|backup\.js|test/.*\.js)$
         stages: [pre-commit]
 
     # ATN's automated review. The linter is deliberately not pinned: a release

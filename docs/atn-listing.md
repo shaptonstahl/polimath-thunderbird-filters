@@ -51,7 +51,7 @@ Polimath Filters has no toolbar button. Open its editor from <b>Tools → Add-on
 Requires Thunderbird 121 or later. Most recently tested on Thunderbird 159.0.
 
 <b>Privacy</b>
-Polimath Filters collects nothing: no accounts, no analytics, no network requests. Mail is read only inside Thunderbird on your computer, and filters are stored in Thunderbird's local extension storage.
+Polimath Filters collects nothing: no accounts, no analytics, no network requests. Mail is read only inside Thunderbird on your computer, and filters are stored in Thunderbird's local extension storage. Optional automatic backups are saved as messages in a mail account you choose; on a server-based account, Thunderbird syncs them to that server.
 
 Source code, issue tracker, and full documentation: <a href="https://github.com/shaptonstahl/polimath-thunderbird-filters">github.com/shaptonstahl/polimath-thunderbird-filters</a>
 ```

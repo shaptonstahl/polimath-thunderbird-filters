@@ -27,10 +27,12 @@
         <button id="btn-monitored-folders" class="btn-secondary">Monitored folders…</button>
         <button id="btn-export" class="btn-secondary">Export…</button>
         <button id="btn-import" class="btn-secondary">Import…</button>
+        <button id="btn-backups" class="btn-secondary">Backups…</button>
         <button id="btn-help" class="btn-help">? Instructions</button>
         <input type="file" id="import-file-input" accept=".json" class="hidden" />
       </div>
     </header>
+    <div id="backup-banner" class="backup-banner hidden"></div>
     <ul id="filter-list">
       <!-- populated by options.js -->
     </ul>
@@ -204,6 +206,42 @@
 </div>
 
 <!-- ── Monitored folders modal ─────────────────────────────────────────────── -->
+<!-- ── Backups modal ──────────────────────────────────────────────────────── -->
+<div id="modal-backup-overlay" class="modal-overlay hidden">
+  <div class="modal-box modal-box-wide">
+    <h2>Automatic Backups</h2>
+    <p class="hint">Backups are saved as messages in a folder named “Polimath Filters Backups”, so they survive removing and reinstalling the add-on. The newest backup of each day is kept for 30 days, then the newest of each month, forever.</p>
+    <label class="backup-row"><input type="checkbox" id="backup-enabled" /> Back up my filters automatically</label>
+    <label class="backup-row">Keep backups in account
+      <select id="backup-account"></select>
+    </label>
+    <p id="backup-server-note" class="hint hidden">⚠ This account keeps its mail on a server, so your filter definitions (including the addresses and patterns in them) will be stored on that server.</p>
+    <p id="backup-status" class="hint"></p>
+    <div class="modal-actions">
+      <button id="backup-save" class="btn-primary">Save</button>
+      <button id="backup-now" class="btn-secondary">Back up now</button>
+      <button id="backup-restore" class="btn-secondary">Restore from mail…</button>
+      <button id="backup-close" class="btn-ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Restore modal ──────────────────────────────────────────────────────── -->
+<div id="modal-restore-overlay" class="modal-overlay hidden">
+  <div class="modal-box modal-box-wide">
+    <h2>Restore From Mail</h2>
+    <p class="hint">Choose the folder that holds your backups. Messages that are not Polimath Filters backups are listed with the reason they can't be used.</p>
+    <label class="backup-row">Folder
+      <select id="restore-folder"></select>
+    </label>
+    <ul id="restore-list" class="check-list"></ul>
+    <div class="modal-actions">
+      <button id="restore-confirm" class="btn-primary" disabled>Restore selected…</button>
+      <button id="restore-cancel" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-monitored-overlay" class="modal-overlay hidden">
   <div class="modal-box modal-box-wide">
     <h2>Monitored Folders</h2>
@@ -247,6 +285,9 @@
       <h3>Run now</h3>
       <p><strong>▶ Run all on folder…</strong> applies your enabled filters to an existing folder. Use <strong>Dry Run</strong> to preview matches without changing anything.</p>
 
+      <h3>Backups</h3>
+      <p><strong>Backups…</strong> turns on automatic backups, saved as messages in a “Polimath Filters Backups” folder in the account you choose. Removing the add-on deletes your filters; backups are how you get them back. To upgrade, install the new version over this one instead of removing it first.</p>
+
       <h3>Export / Import</h3>
       <p>Share filters as JSON. Folder IDs are machine-specific, so "Move to folder" actions may need reconfiguring after an import.</p>
 
@@ -260,6 +301,7 @@
 
 <script src="confusables-data.js"></script>
 <script src="filter-engine.js"></script>
+<script src="backup.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

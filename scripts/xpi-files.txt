@@ -10,6 +10,7 @@
 manifest.json
 confusables-data.js
 filter-engine.js
+backup.js
 background.js
 options.html
 options.js

@@ -146,17 +146,26 @@
   const store = {
     filters,
     monitoredFolders: [F.pInbox, F.wInbox],
+    schemaVersion: 4,
+    // Backups already set up, so the listing shots show the editor, not the offer banner.
+    backupSettings: { enabled: true, accountId: "account://personal", promptDismissed: true },
   };
 
   window.messenger = {
     storage: {
       local: {
-        get: async key => (key in store ? { [key]: store[key] } : {}),
+        get: async keys => {
+          const wanted = keys == null ? Object.keys(store) : [].concat(keys);
+          return Object.fromEntries(wanted.filter(k => k in store).map(k => [k, store[k]]));
+        },
         set: async obj => Object.assign(store, obj),
       },
     },
     accounts: {
       list: async () => [folders.personal, folders.work],
+    },
+    folders: {
+      query: async () => [],
     },
     messages: {
       tags: {

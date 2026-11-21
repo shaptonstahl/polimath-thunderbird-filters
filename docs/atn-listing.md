@@ -11,7 +11,7 @@ Thunderbird window and must be recaptured by hand if the Add-ons Manager changes
 
 ## Summary (250 characters max)
 
-Replaces Thunderbird's filter editor with one that supports regular expressions, nested AND / OR / NOT logic, and Unicode lookalike (homoglyph) detection. Runs on new mail in folders you choose. Collects nothing.
+Replaces Thunderbird's filter editor with one that supports regular expressions, nested AND / OR / NOT logic, and Unicode lookalike (homoglyph) detection. Runs on new mail in folders you choose, with optional automatic backups. Collects nothing.
 
 ## Description
 
@@ -37,7 +37,9 @@ Polimath Filters has no toolbar button. Open its editor from <b>Tools → Add-on
 <li>Filters run top to bottom, and every matching filter applies. Drag the <b>⠿</b> handle to reorder.</li>
 <li>The switch next to each filter enables or disables it. <b>×</b> deletes it.</li>
 <li><b>▶</b> next to a filter runs just that filter on a folder you pick. <b>▶ Run all on folder…</b> runs every enabled filter. Both offer <b>Dry Run</b>, which lists the messages that would match without changing anything. Try a dry run before running a new filter for real.</li>
-<li><b>Export…</b> and <b>Import…</b> save and load filters as JSON, for backup or to move them to another profile. Move-to-folder targets may need re-selecting after import on a different machine.</li>
+<li><b>Backups…</b> turns on automatic backups, saved as messages in a "Polimath Filters Backups" folder in the account you choose: the newest of each day for 30 days, then the newest of each month. <b>Restore from mail…</b> brings any backup back, and after a reinstall the editor offers to restore the newest one.</li>
+<li><b>Export…</b> and <b>Import…</b> save and load filters as JSON, for backup or to move them to another profile. Files from older versions are upgraded as they are imported, and anything that did not carry over (a missing move target, folder, or tag, an invalid regex) is listed under that filter.</li>
+<li><b>Removing the add-on deletes your filters.</b> To upgrade, install the new version over the old one instead of removing it first.</li>
 </ul>
 
 <b>Tips</b>
@@ -63,7 +65,7 @@ Upload in this order. The first one is the listing's lead image.
 | File | Caption |
 |---|---|
 | `00-entry-point.png` | Where to find it: in Tools → Add-ons and Themes, click the wrench (Add-on Options) on the Polimath Filters card. |
-| `01-filter-list.png` | The filter list. Toggle, reorder, run, or delete filters; the buttons at the top open folder monitoring, import/export, and instructions. |
+| `01-filter-list.png` | The filter list. Toggle, reorder, run, or delete filters; the buttons at the top open folder monitoring, import/export, backups, and instructions. |
 | `02-editor-regex-and-not.png` | A filter combining a regular expression with a NOT group, two actions, and a move-to-folder ending. |
 | `03-editor-confusables.png` | Catching lookalike-character phishing: an OR group of "has confusable character" and "confusable with paypal". |
 | `04-monitored-folders.png` | Choose which folders are watched for new mail. |

@@ -12,7 +12,7 @@ port="${PORT:-8124}"
 work="$(mktemp -d)"
 trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
 
-cp "$repo"/{options.js,options.css,filter-engine.js,confusables-data.js} "$here"/{mock.js,setup.js} "$work"/
+cp "$repo"/{options.js,options.css,filter-engine.js,backup.js,confusables-data.js} "$here"/{mock.js,setup.js} "$work"/
 cp -r "$repo/icons" "$work"/
 # mock.js must load before options.js; setup.js after it.
 sed -e 's#<script src="confusables-data.js"></script>#<script src="mock.js"></script>\n&#' \

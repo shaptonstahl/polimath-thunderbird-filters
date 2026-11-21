@@ -572,6 +572,7 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
 .backup-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .backup-row select { flex: 1; }
 .restore-invalid { opacity: .55; }
+.uninstall-note { margin-bottom: 6px; }
 .restore-reason { flex-basis: 100%; padding-left: 22px; font-size: 12px; }
 .check-list li.restore-item { flex-wrap: wrap; }
 

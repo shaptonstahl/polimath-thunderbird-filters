@@ -1,6 +1,7 @@
 # Plan: filter safety (migrations, backups, uninstall)
 
 Status: approved 2026-11-20. Phases ship in order A → B → D, one minor release each.
+Shipped: A in 3.3.0, B in 3.4.0, D in 3.5.0 (all 2026-11-20).
 Background: on 2026-11-20 a reinstall wiped every stored filter. Thunderbird deletes an
 extension's `storage.local` when it is removed, and the only recovery was a month-old export
 that the importer could not migrate correctly.
@@ -95,6 +96,7 @@ users a permission prompt on update; re-run `scripts/check-webext.sh`.
 
 ## Also in scope
 
-- `scripts/export-stored-filters.sh`: detect snap/flatpak profiles; read the IndexedDB-backed
-  `storage.local` (`idb/*.sqlite`) rather than the localStorage table it reads today.
+- `scripts/export-stored-filters.sh`: detect snap/flatpak/macOS/Windows profiles; locate the add-on's
+  storage by its UUID in `prefs.js`; decode the IndexedDB-backed `storage.local` (Snappy-compressed
+  SpiderMonkey structured clone) from a copy of the database, so Thunderbird can stay open.
 - ADR-008 (schema versions and migrations), ADR-009 (mail-folder backups).

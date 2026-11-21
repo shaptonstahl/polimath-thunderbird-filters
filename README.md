@@ -17,7 +17,7 @@ A Thunderbird Mail Extension that replaces the built-in filter editor with a mor
 - **Seven actions** — Mark read/unread, Add/Remove star, Add/remove tag, Mark as spam — plus a per-rule ending (continue, stop, move to a folder, or delete)
 - **Automatic backups** — opt-in; saved as messages in a mail folder you choose, kept daily for 30 days then monthly forever, and offered back automatically after a reinstall
 - **Import / Export** — share filters between Thunderbird profiles or back them up as JSON files
-- **Offline export** — extract filters directly from the profile when Thunderbird isn't running (`scripts/export-stored-filters.sh`)
+- **Offline export** — extract filters directly from a profile, even a restored copy or while Thunderbird is running (`scripts/export-stored-filters.sh`)
 - **Automatic filtering** — runs on new mail in any folder you choose to monitor
 - **Folder scoping** — each filter applies to a subset of the monitored folders
 - **Manual run** — apply any filter (or all filters) to an existing folder
@@ -207,6 +207,36 @@ and finds a Polimath Filters Backups folder, it offers to restore from it.
 Removing the add-on deletes its filters. To upgrade, install the new version
 over the old one instead of removing it first.
 
+### Restoring after removal
+
+Removing the add-on makes Thunderbird delete its stored filters immediately, and
+nothing inside Thunderbird can bring them back. What you can recover depends on
+what was saved before the removal:
+
+1. **Automatic backups were on.** Reinstall the add-on. With no filters stored,
+   it looks for a **Polimath Filters Backups** folder in every account and
+   offers to restore the newest backup. You can also use **Backups… → Restore
+   from mail…** and pick any folder.
+2. **You have an export file.** Reinstall, then use **Import…**. Files from any
+   earlier version are upgraded as they are imported.
+3. **You have a filesystem backup of your Thunderbird profile** from before the
+   removal. Restore the profile to a separate folder and run
+   `scripts/export-stored-filters.sh -p <that folder>` to get an export file
+   (no need to start Thunderbird on it), then Import that file.
+4. **None of these.** The filters cannot be recovered.
+
+To upgrade, install the new version over the old one (**Add-ons and Themes →
+gear menu → Install Add-on From File…**) instead of removing it first; that
+keeps your filters.
+
+**Advanced safety net.** Thunderbird has two settings, in **Settings → General
+→ Config Editor**, that keep an add-on's storage through a removal:
+`extensions.webextensions.keepStorageOnUninstall` and
+`extensions.webextensions.keepUuidOnUninstall`. Both must be `true` *before*
+the removal; the second keeps the add-on's internal ID, without which a
+reinstall cannot find the kept data. They apply to every add-on, and are meant
+for development, so prefer backups.
+
 ### Import and export
 
 The filter list toolbar has **Export…** and **Import…** buttons for sharing filters between Thunderbird profiles or creating backups.
@@ -214,7 +244,7 @@ The filter list toolbar has **Export…** and **Import…** buttons for sharing 
 - **Export** opens a modal where you select which filters to include. The selected filters are saved as a `.json` file.
 - **Import** reads a previously exported `.json` file and shows each filter with a checkbox. Files from any earlier version are upgraded to the current format as they are imported; anything that did not carry over cleanly (a move target or tag that does not exist in this profile, a filter left with no source folders, an invalid regex, conflicting endings) is listed under that filter. Files from a newer version of the add-on are refused with the version needed. If an imported filter has the same name as an existing one, a **Compare** button lets you view both side-by-side and rename either before importing.
 
-**Offline export** — when Thunderbird isn't running, use the bundled shell script to extract filters directly from the profile:
+**Offline export** — the bundled shell script extracts filters straight from a profile folder: your live profile (it reads a copy, so Thunderbird can stay open), or a profile restored from a filesystem backup. Without `-p` it looks for the default profile in `~/.thunderbird`, the snap and flatpak locations, `~/Library/Thunderbird` (macOS) and `%APPDATA%\Thunderbird` (Windows). It reads the add-on's IndexedDB storage directly, so it needs nothing but Python 3:
 
 ```sh
 scripts/export-stored-filters.sh -l                # list saved filters
@@ -222,7 +252,7 @@ scripts/export-stored-filters.sh -p ~/.thunderbird/abc123.default  # export from
 scripts/export-stored-filters.sh -o my-filters.json # export to a named file
 ```
 
-The output file can be imported back via the UI's Import button. Requires only Python 3 (standard library; no extra packages needed).
+The output file can be imported back via the UI's Import button. It records the installed add-on version and data format, so Import upgrades it correctly. Requires only Python 3 (standard library; no extra packages needed).
 
 ### Running filters manually
 

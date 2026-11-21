@@ -10,7 +10,7 @@ A Thunderbird MailExtension (Manifest V2) that replaces the built-in filter edit
 npm test                  # Run the filter-engine test suite (Node 18+)
 npm run build:confusables # Re-fetch Unicode confusables.txt and regenerate confusables-data.js
 npm run sync-version      # Copy package.json's version into manifest.json
-./scripts/export-stored-filters.sh  # Offline export: extract filters from profile without Thunderbird
+./scripts/export-stored-filters.sh  # Offline export from a profile folder (live or restored); safe while Thunderbird runs
 ./scripts/verify-xpi.sh <file.xpi>  # Assert a built .xpi contains every referenced file
 ./scripts/setup-dev.sh             # One-time clone setup: pre-commit hooks + webext-linter
 ./scripts/check-webext.sh [xpi]     # Run Thunderbird's webext-linter on the packaged files, or on a built .xpi
@@ -34,7 +34,7 @@ background.js        Listens for new mail in monitored folders, loads filters, c
 options.js           Options page UI — filter list, condition tree editor, run-on-folder modal
 scripts/
   build-confusables.js       Fetches confusables.txt from unicode.org, writes confusables-data.js
-  export-stored-filters.sh   Extracts filters from a TB profile SQLite DB; requires python3 only
+  export-stored-filters.sh   Decodes storage.local from a profile's IndexedDB (snappy + structured clone) in stdlib Python
   verify-xpi.sh              Checks a built .xpi against every path manifest.json and options.html reference
   check-release-bump.sh      Fails when a packaged change lands without a version bump
   bump-version.sh            Bumps the version and commits it; push to release

@@ -126,5 +126,9 @@ messenger.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   }
 });
 
+// Opens after removal, when storage.local is already gone: the page explains
+// what can still be recovered. No query string, so nothing is tracked.
+messenger.runtime.setUninstallURL("https://github.com/shaptonstahl/polimath-thunderbird-filters#restoring-after-removal");
+
 loadState().then(() => backupIfEnabled({ onlyIfStale: true }));
 setInterval(() => backupIfEnabled({ onlyIfStale: true }), BACKUP_CHECK_MS);

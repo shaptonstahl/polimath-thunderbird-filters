@@ -195,7 +195,8 @@ A backup is made a few minutes after you change filters or monitored folders,
 and at least daily while Thunderbird runs; nothing is written when nothing
 changed. The newest backup of each day is kept for 30 days, then the newest of
 each month, forever. Rotation only ever deletes the add-on's own backup
-messages.
+messages, and follows the account's deletion setting, so a rotated backup
+usually goes to Trash first (on Gmail it does).
 
 **Restore from mail…** opens any folder and lists its messages: backups can be
 selected, and anything else is shown with the reason it can't be used. A

@@ -39,5 +39,7 @@ write and read: `messages.import` places a file as a message in any folder, loca
 - New permissions `messagesImport` and `accountsFolders`; existing users see a prompt on update.
 - Backups also carry `monitoredFolders`: a fresh install monitors only Inboxes, so restored filters
   scoped to other folders would otherwise never run.
+- Rotation deletes through the account's own deletion setting, not permanently, so a rotated backup is
+  still recoverable from Trash for a while (confirmed on Gmail: it goes to Trash, not All Mail).
 - Rotation identifies its own messages by the `.invalid` From address rather than the custom header,
   because `messages.list` exposes the author but not custom headers before Thunderbird 147.

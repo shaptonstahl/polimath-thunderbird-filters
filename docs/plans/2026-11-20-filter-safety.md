@@ -66,7 +66,7 @@ backup is over 24 h old. Skipped when a content hash matches the newest backup.
 
 **Rotation.** Keep the newest backup of each day for 30 days, then the newest of each month
 forever. Rotation deletes only messages in the backup folder that carry the backup header: never
-anything else. On Gmail, IMAP deletion removes the label and the message stays in All Mail.
+anything else. Rotation uses `messages.delete` without the permanent option, so the account's own deletion setting applies: on Gmail (tested 2026-11-20) rotated backups go to Trash, which Gmail empties after 30 days.
 
 **Restore.**
 - *Automatic offer:* when storage has no filters, look in every account for a folder named

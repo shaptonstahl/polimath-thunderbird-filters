@@ -14,6 +14,7 @@ let monitoredSnapshot = [];  // snapshot at monitored-modal open, for cancel
 let tagList = [];          // [{key, label, color}] populated on load
 let dragSrcIdx = null;     // index of filter being dragged
 let importCandidates = []; // filters parsed from an import file, pending selection
+let importWarnings = [];   // per-candidate migration warnings, parallel to importCandidates
 let compareIdx = null;     // index into importCandidates currently open in compare modal
 let compareExistingFilter = null; // reference into allFilters for current compare
 let savedSnapshot = null;     // JSON of editingFilter at last open/save, for dirty tracking
@@ -21,12 +22,11 @@ let savedSnapshot = null;     // JSON of editingFilter at last open/save, for di
 // ── Storage helpers ───────────────────────────────────────────────────────
 
 async function loadFilters() {
-  const data = await messenger.storage.local.get("filters");
-  const original = data.filters || [];
-  const scoped = await migrateFiltersToSourceFolders(original);
-  allFilters = migrateFiltersToEnding(scoped);
-  if (allFilters !== original) {
-    await saveFilters();
+  const data = await messenger.storage.local.get(["filters", "schemaVersion"]);
+  const { filters, changed } = await migrateStoredFilters(data.filters || [], data.schemaVersion);
+  allFilters = filters;
+  if (changed || data.schemaVersion !== CURRENT_SCHEMA) {
+    await saveMigratedFilters(allFilters);
   }
 }
 
@@ -1289,6 +1289,7 @@ function doExport() {
   const envelope = {
     exportedBy: "Polimath Filters",
     extensionVersion: mf.version,
+    schemaVersion: CURRENT_SCHEMA,
     exportedAt: new Date().toISOString(),
     platform: navigator.userAgentData?.platform || "unknown",
     filterCount: selected.length,
@@ -1310,7 +1311,7 @@ function doExport() {
 
 function handleImportFile(file) {
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     let parsed;
     try { parsed = JSON.parse(e.target.result); } catch {
       alert("Could not parse file — make sure it is a valid Polimath Filters export.");
@@ -1320,15 +1321,38 @@ function handleImportFile(file) {
       alert("This file does not appear to be a Polimath Filters export.");
       return;
     }
+    const { schema, known } = importSchema(parsed);
+    if (schema > CURRENT_SCHEMA) {
+      alert(`This file was made by Polimath Filters ${parsed.extensionVersion ?? "(a newer version)"}, which uses data format ${schema}. This version reads formats up to ${CURRENT_SCHEMA}. Update the add-on, then import again.`);
+      return;
+    }
     const valid = parsed.filters.filter(f => f && f.name && f.condition && Array.isArray(f.actions));
     if (valid.length === 0) { alert("No valid filters found in this file."); return; }
-    importCandidates = valid.map(f => JSON.parse(JSON.stringify(f)));
-    openImportModal(parsed);
+
+    const notes = [];
+    const skipped = parsed.filters.length - valid.length;
+    if (skipped > 0) notes.push(`${skipped} entr${skipped === 1 ? "y was" : "ies were"} skipped: not a complete filter.`);
+
+    let env = {};
+    try {
+      env = await buildMigrationEnv();
+    } catch (err) {
+      console.error("Polimath Filters: could not read accounts for import", err);
+      notes.push("Could not read your accounts, so folder and tag references were not checked.");
+    }
+    if (!known && valid.some(f => Array.isArray(f.accountIds) && f.accountIds.length === 0)) {
+      notes.push("This file does not say which version made it. Filters with no account limit are treated as running on no accounts (the 2.0.0+ meaning).");
+    }
+
+    const migrated = valid.map(f => migrateFilters([JSON.parse(JSON.stringify(f))], schema, env));
+    importCandidates = migrated.map(r => r.filters[0]);
+    importWarnings = migrated.map(r => r.warnings.map(w => w.message));
+    openImportModal(parsed, notes);
   };
   reader.readAsText(file);
 }
 
-function openImportModal(meta) {
+function openImportModal(meta, notes = []) {
   const metaDiv = document.getElementById("import-file-meta");
   metaDiv.innerHTML = "";
   if (meta.exportedAt) {
@@ -1338,11 +1362,13 @@ function openImportModal(meta) {
     p.textContent = `Exported: ${date} · v${meta.extensionVersion ?? "?"} · ${meta.platform ?? "?"}`;
     metaDiv.appendChild(p);
   }
+  for (const note of notes) {
+    const p = document.createElement("p");
+    p.className = "hint import-note";
+    p.textContent = `⚠ ${note}`;
+    metaDiv.appendChild(p);
+  }
   renderImportList();
-  const hasMoveEnding = importCandidates.some(f => f.ending && f.ending.type === "move");
-  document.getElementById("import-move-warn").classList.toggle("hidden", !hasMoveEnding);
-  const hasFolderScope = importCandidates.some(f => Array.isArray(f.sourceFolderIds) && f.sourceFolderIds.length > 0);
-  document.getElementById("import-folder-scope-warn").classList.toggle("hidden", !hasFolderScope);
   document.getElementById("modal-import-overlay").classList.remove("hidden");
 }
 
@@ -1380,6 +1406,18 @@ function renderImportList() {
       cmpBtn.addEventListener("click", () => openCompareModal(idx));
       li.appendChild(badge);
       li.appendChild(cmpBtn);
+    }
+
+    const warnings = importWarnings[idx] || [];
+    if (warnings.length) {
+      const box = document.createElement("div");
+      box.className = "import-warnings";
+      for (const message of warnings) {
+        const line = document.createElement("div");
+        line.textContent = `⚠ ${message}`;
+        box.appendChild(line);
+      }
+      li.appendChild(box);
     }
 
     list.appendChild(li);
@@ -1436,6 +1474,7 @@ async function doImportSelected() {
   renderFilterList();
   document.getElementById("modal-import-overlay").classList.add("hidden");
   importCandidates = [];
+  importWarnings = [];
 }
 
 // ── Compare ───────────────────────────────────────────────────────────────
@@ -1582,12 +1621,14 @@ document.getElementById("import-confirm").addEventListener("click", doImportSele
 document.getElementById("import-cancel").addEventListener("click", () => {
   document.getElementById("modal-import-overlay").classList.add("hidden");
   importCandidates = [];
+  importWarnings = [];
 });
 document.getElementById("modal-import-overlay").addEventListener("click", e => {
   if (e.target === document.getElementById("modal-import-overlay")) {
     if (!document.getElementById("modal-compare-overlay").classList.contains("hidden")) return;
     document.getElementById("modal-import-overlay").classList.add("hidden");
     importCandidates = [];
+    importWarnings = [];
   }
 });
 

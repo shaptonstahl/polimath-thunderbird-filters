@@ -614,6 +614,15 @@ button { cursor: pointer; border: none; border-radius: var(--radius); font-size:
 
 .check-list input[type="checkbox"] { flex-shrink: 0; width: 14px; height: 14px; cursor: pointer; }
 
+.check-list li.import-item { flex-wrap: wrap; }
+
+.import-warnings {
+  flex-basis: 100%;
+  padding-left: 22px;
+  font-size: 12px;
+  color: var(--node-border-or);
+}
+
 .import-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 
 /* ── Conflict rows ────────────────────────────────────────────────────────── */

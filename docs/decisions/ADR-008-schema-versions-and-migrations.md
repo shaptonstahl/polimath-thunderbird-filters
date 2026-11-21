@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (target v3.3.0)
+Accepted (v3.3.0)
 
 ## Context
 
@@ -27,3 +27,6 @@ a v1 export loses its scope when migrated as if it were v2.
 - One place to add the next migration; each step is unit-tested from synthetic fixtures.
 - Warnings become user-visible in the import dialog instead of silent.
 - `migrateFiltersToSourceFolders` and `migrateFiltersToEnding` become steps of the pipeline.
+- Unversioned stored data is treated as schema 2: 2.0.0 shipped the empty-list change as a documented
+  breaking change without rewriting storage, so every install that reached 2.0.0 already had the new
+  meaning. Only export files can be schema 1.

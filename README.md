@@ -182,7 +182,7 @@ A filter only runs on mail that appears in one of its checked folders. This is w
 The filter list toolbar has **Export…** and **Import…** buttons for sharing filters between Thunderbird profiles or creating backups.
 
 - **Export** opens a modal where you select which filters to include. The selected filters are saved as a `.json` file.
-- **Import** reads a previously exported `.json` file and shows each filter with a checkbox. If an imported filter has the same name as an existing one, a **Compare** button lets you view both side-by-side and rename either before importing.
+- **Import** reads a previously exported `.json` file and shows each filter with a checkbox. Files from any earlier version are upgraded to the current format as they are imported; anything that did not carry over cleanly (a move target or tag that does not exist in this profile, a filter left with no source folders, an invalid regex, conflicting endings) is listed under that filter. Files from a newer version of the add-on are refused with the version needed. If an imported filter has the same name as an existing one, a **Compare** button lets you view both side-by-side and rename either before importing.
 
 **Offline export** — when Thunderbird isn't running, use the bundled shell script to extract filters directly from the profile:
 

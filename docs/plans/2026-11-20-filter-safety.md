@@ -26,8 +26,8 @@ that the importer could not migrate correctly.
 | 4 | 3.1.0 – | `ending` | Current |
 
 Exports since 1.8.0 carry `extensionVersion`, which identifies the schema exactly. Stored data
-without `schemaVersion` is identified by its shape; an empty `accountIds` in unversioned storage
-is ambiguous between schemas 1 and 2 (task: check whether 2.0.0 rewrote stored data on upgrade).
+without `schemaVersion` is treated as schema 2: 2.0.0 did not rewrite stored data (it shipped the
+empty-list change as a documented breaking change), so only export files can be schema 1.
 
 **One migration pipeline.** `migrateFilters(filters, fromSchema, env) → { filters, warnings }` in
 `filter-engine.js`: pure, with `env` supplying the accounts, folders and tags that exist so the
@@ -38,7 +38,6 @@ background startup and options-page load, replacing today's two ad-hoc migration
 
 - Schema 1 filter with empty `accountIds`: scoped to every account's Inbox (stated, so it is visible)
 - Filter ends up with no source folders: it will not run until one is chosen
-- `stopProcessing` without move/delete: dropped (no equivalent)
 - Several move/delete actions: which one became the ending
 - Move target folder or tag does not exist in this profile
 - Invalid regex in a condition

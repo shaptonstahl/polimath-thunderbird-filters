@@ -1211,6 +1211,167 @@ describe('migrateFiltersToEnding', () => {
   });
 });
 
+// ── Schema versions & migrateFilters ─────────────────────────────────────────
+
+describe('schemaForExtensionVersion', () => {
+  it('maps each release range to its schema', () => {
+    assert.equal(E.schemaForExtensionVersion('1.8.0'), 1);
+    assert.equal(E.schemaForExtensionVersion('1.10.1'), 1);
+    assert.equal(E.schemaForExtensionVersion('2.0.0'), 2);
+    assert.equal(E.schemaForExtensionVersion('2.1.0'), 3);
+    assert.equal(E.schemaForExtensionVersion('3.0.3'), 3);
+    assert.equal(E.schemaForExtensionVersion('3.1.0'), 4);
+    assert.equal(E.schemaForExtensionVersion('3.2.2'), 4);
+  });
+
+  it('returns null for a missing or malformed version', () => {
+    assert.equal(E.schemaForExtensionVersion(undefined), null);
+    assert.equal(E.schemaForExtensionVersion('banana'), null);
+  });
+});
+
+describe('importSchema', () => {
+  it('prefers an explicit schemaVersion', () => {
+    assert.deepEqual({ ...E.importSchema({ schemaVersion: 4, extensionVersion: '1.9.0' }) }, { schema: 4, known: true });
+  });
+
+  it('falls back to extensionVersion', () => {
+    assert.deepEqual({ ...E.importSchema({ extensionVersion: '1.10.1' }) }, { schema: 1, known: true });
+  });
+
+  it('assumes the 2.0.0+ meaning when the file carries no version', () => {
+    assert.deepEqual({ ...E.importSchema({}) }, { schema: 2, known: false });
+  });
+});
+
+describe('migrateFilters', () => {
+  const inboxByAccount = new Map([['acct1', 'inbox1'], ['acct2', 'inbox2']]);
+  const env = (extra = {}) => ({ inboxByAccount, ...extra });
+  const base = (over) => ({ id: 'f1', name: 'F', enabled: true, condition: { type: 'and', children: [] }, actions: [], ...over });
+  const messages = (r) => Array.from(r.warnings, w => w.message).join(' | ');
+
+  it('reports CURRENT_SCHEMA as 4', () => {
+    assert.equal(E.CURRENT_SCHEMA, 4);
+  });
+
+  it('schema 1: an empty accountIds list means every account', () => {
+    const r = E.migrateFilters([base({ accountIds: [] })], 1, env());
+    assert.deepEqual(Array.from(r.filters[0].sourceFolderIds), ['inbox1', 'inbox2']);
+    assert.equal(r.filters[0].accountIds, undefined);
+    assert.match(messages(r), /every account/i);
+  });
+
+  it('schema 2: an empty accountIds list means no folders, with a warning', () => {
+    const r = E.migrateFilters([base({ accountIds: [] })], 2, env());
+    assert.deepEqual(Array.from(r.filters[0].sourceFolderIds), []);
+    assert.match(messages(r), /no source folders/i);
+  });
+
+  it('warns when accounts the filter was limited to no longer exist', () => {
+    const r = E.migrateFilters([base({ accountIds: ['acct1', 'gone'] })], 2, env());
+    assert.deepEqual(Array.from(r.filters[0].sourceFolderIds), ['inbox1']);
+    assert.match(messages(r), /1 account/i);
+  });
+
+  it('converts legacy move/delete actions into an ending', () => {
+    const r = E.migrateFilters([base({ accountIds: ['acct1'], actions: [{ type: 'mark-read' }, { type: 'move', folderId: 'X', folderName: 'Bills' }] })], 1, env());
+    const f = r.filters[0];
+    assert.equal(f.ending.type, 'move');
+    assert.equal(f.ending.folderId, 'X');
+    assert.deepEqual(Array.from(f.actions, a => a.type), ['mark-read']);
+  });
+
+  it('warns which terminal won when a legacy filter had several', () => {
+    const r = E.migrateFilters([base({ sourceFolderIds: ['inbox1'], actions: [{ type: 'delete' }, { type: 'move', folderId: 'X', folderName: 'Bills' }] })], 3, env());
+    assert.equal(r.filters[0].ending.type, 'move');
+    assert.match(messages(r), /Bills/);
+    assert.match(messages(r), /delete/i);
+  });
+
+  it('maps a legacy stopProcessing flag to a stop ending', () => {
+    const r = E.migrateFilters([base({ sourceFolderIds: ['inbox1'], stopProcessing: true })], 3, env());
+    assert.equal(r.filters[0].ending.type, 'stop');
+    assert.equal(r.filters[0].stopProcessing, undefined);
+  });
+
+  it('leaves current-schema filters untouched and reports no change', () => {
+    const filters = [base({ sourceFolderIds: ['inbox1'], ending: { type: 'continue' } })];
+    const r = E.migrateFilters(filters, 4, env());
+    assert.equal(r.filters, filters);
+    assert.equal(r.changed, false);
+    assert.equal(r.warnings.length, 0);
+  });
+
+  it('does not mutate its input', () => {
+    const filters = [base({ accountIds: ['acct1'], actions: [{ type: 'delete' }] })];
+    const before = JSON.stringify(filters);
+    E.migrateFilters(filters, 1, env());
+    assert.equal(JSON.stringify(filters), before);
+  });
+
+  it('leaves account scoping alone when no account map is available', () => {
+    const r = E.migrateFilters([base({ accountIds: ['acct1'] })], 2, {});
+    assert.deepEqual(Array.from(r.filters[0].accountIds), ['acct1']);
+    assert.equal(r.filters[0].sourceFolderIds, undefined);
+  });
+
+  it('validate: warns about folders and tags missing from this profile', () => {
+    const f = base({
+      sourceFolderIds: ['inbox1', 'elsewhere'],
+      actions: [{ type: 'add-tag', tag: '$label9' }],
+      ending: { type: 'move', folderId: 'nowhere', folderName: 'Old/Bills' },
+    });
+    const r = E.migrateFilters([f], 4, env({ folderIds: new Set(['inbox1']), tagKeys: new Set(['$label1']) }));
+    const m = messages(r);
+    assert.match(m, /1 source folder/i);
+    assert.match(m, /Old\/Bills/);
+    assert.match(m, /\$label9/);
+  });
+
+  it('validate: warns about an invalid regex', () => {
+    const cond = { type: 'condition', field: 'subject', operator: 'regex', value: '(unclosed', caseSensitive: false };
+    const r = E.migrateFilters([base({ sourceFolderIds: ['inbox1'], ending: { type: 'continue' }, condition: cond })], 4, env({ folderIds: new Set(['inbox1']), tagKeys: new Set() }));
+    assert.match(messages(r), /regex/i);
+  });
+
+  it('ties each warning to its filter', () => {
+    const r = E.migrateFilters([base({ id: 'abc', name: 'Ossoff', accountIds: [] })], 2, env());
+    assert.equal(r.warnings[0].filterId, 'abc');
+    assert.equal(r.warnings[0].filterName, 'Ossoff');
+  });
+});
+
+describe('migrateStoredFilters', () => {
+  const accounts = [
+    { id: 'acct1', name: 'A', folders: [{ id: 'inbox1', type: 'inbox', name: 'Inbox' }] },
+  ];
+
+  it('treats unversioned stored data with the 2.0.0+ meaning of an empty account list', async () => {
+    const ctx = makeContext();
+    ctx.messenger.accounts.list = async () => accounts;
+    const r = await ctx.migrateStoredFilters([{ id: '1', name: 'a', enabled: true, accountIds: [], condition: {}, actions: [] }], undefined);
+    assert.deepEqual(Array.from(r.filters[0].sourceFolderIds), []);
+    assert.equal(r.changed, true);
+  });
+
+  it('does not enumerate accounts when nothing needs account migration', async () => {
+    const ctx = makeContext();
+    ctx.messenger.accounts.list = async () => { throw new Error('must not be called'); };
+    const filters = [{ id: '1', name: 'a', enabled: true, sourceFolderIds: ['x'], condition: {}, actions: [], ending: { type: 'continue' } }];
+    const r = await ctx.migrateStoredFilters(filters, 4);
+    assert.equal(r.filters, filters);
+    assert.equal(r.changed, false);
+  });
+
+  it('leaves filters unchanged when account enumeration fails', async () => {
+    const ctx = makeContext();
+    ctx.messenger.accounts.list = async () => { throw new Error('offline'); };
+    const filters = [{ id: '1', name: 'a', enabled: true, accountIds: ['acct1'], condition: {}, actions: [] }];
+    const r = await ctx.migrateStoredFilters(filters, 2);
+    assert.deepEqual(Array.from(r.filters[0].accountIds), ['acct1']);
+  });
+});
+
 // ── runFiltersOnFolder — folder scoping ───────────────────────────────────────
 
 describe('runFiltersOnFolder — folder scoping', () => {

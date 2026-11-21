@@ -423,17 +423,192 @@ async function fetchAccountInboxes() {
   return inboxByAccount;
 }
 
-/**
- * Migrate legacy `accountIds` scoping to `sourceFolderIds` (the Inbox of each
- * account), matching the pre-2.1 behavior of running on each account's Inbox.
- * Idempotent: filters that already have `sourceFolderIds` are left untouched.
- */
-async function migrateFiltersToSourceFolders(filters) {
-  const needsMigration = filters.some(f =>
-    f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds)
-  );
-  if (!needsMigration) return filters;
+// ── Schema versions & migration ─────────────────────────────────────────────
+//
+// Schema 1: 1.0.0–1.10.1  accountIds (empty = every account); move/delete in actions
+// Schema 2: 2.0.0         accountIds (empty = no account); move/delete in actions
+// Schema 3: 2.1.0–3.0.x   sourceFolderIds; move/delete in actions; stopProcessing
+// Schema 4: 3.1.0–        ending
+// See docs/decisions/ADR-008-schema-versions-and-migrations.md.
 
+// var, not const: the Node test harness reads it off the vm context's global.
+var CURRENT_SCHEMA = 4;
+
+const ENDING_TYPES = new Set(["continue", "stop", "move", "delete"]);
+
+function schemaForExtensionVersion(version) {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version ?? ""));
+  if (!m) return null;
+  const [major, minor] = [Number(m[1]), Number(m[2])];
+  if (major < 2) return 1;
+  if (major === 2 && minor === 0) return 2;
+  if (major === 2 || (major === 3 && minor === 0)) return 3;
+  return 4;
+}
+
+/**
+ * Which schema an export envelope was written in. `known: false` means the file
+ * carries no version, so the 2.0.0+ meaning of an empty account list is assumed.
+ */
+function importSchema(envelope) {
+  if (Number.isInteger(envelope?.schemaVersion)) return { schema: envelope.schemaVersion, known: true };
+  const fromVersion = schemaForExtensionVersion(envelope?.extensionVersion);
+  if (fromVersion !== null) return { schema: fromVersion, known: true };
+  return { schema: 2, known: false };
+}
+
+function regexErrors(node, out = []) {
+  if (!node) return out;
+  if (node.type === "condition" && node.operator === "regex") {
+    try { new RegExp(node.value ?? ""); } catch (err) { out.push({ value: node.value, error: err.message }); }
+  }
+  for (const child of node.children || []) regexErrors(child, out);
+  if (node.child) regexErrors(node.child, out);
+  return out;
+}
+
+/**
+ * Bring filters from `fromSchema` up to CURRENT_SCHEMA. Pure: `env` supplies what
+ * exists in this profile. `env.inboxByAccount` (Map accountId → Inbox id) is
+ * needed to migrate account scoping; without it that step is skipped. Passing
+ * `env.folderIds` / `env.tagKeys` (Sets) also validates references against
+ * this profile. Returns { filters, warnings, changed }; `filters` is the input
+ * array itself when nothing changed. Each warning names its filter.
+ */
+function migrateFilters(filters, fromSchema, env = {}) {
+  const warnings = [];
+  const isSet = s => typeof s?.has === "function";
+  const validate = isSet(env.folderIds);
+  let changed = false;
+
+  const result = (filters || []).map(f => {
+    if (!f) return f;
+    let copy = f;
+    const warn = message => warnings.push({ filterId: f.id, filterName: f.name, message });
+    const mutable = () => { if (copy === f) { copy = { ...f }; changed = true; } return copy; };
+
+    if (Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds) && env.inboxByAccount) {
+      const c = mutable();
+      if (fromSchema === 1 && f.accountIds.length === 0) {
+        c.sourceFolderIds = [...env.inboxByAccount.values()];
+        warn("Ran on every account in v1.x; now runs on each account's Inbox.");
+      } else {
+        c.sourceFolderIds = f.accountIds.map(id => env.inboxByAccount.get(id)).filter(Boolean);
+        const missing = f.accountIds.length - c.sourceFolderIds.length;
+        if (missing > 0) warn(`${missing} account${missing === 1 ? "" : "s"} it was limited to no longer exist${missing === 1 ? "s" : ""}.`);
+      }
+      delete c.accountIds;
+      if (c.sourceFolderIds.length === 0) warn("Has no source folders, so it will not run until you choose some.");
+    } else if (validate && Array.isArray(f.sourceFolderIds) && f.sourceFolderIds.length === 0) {
+      warn("Has no source folders, so it will not run until you choose some.");
+    }
+
+    if (!(f.ending && ENDING_TYPES.has(f.ending.type))) {
+      const c = mutable();
+      const actions = Array.isArray(c.actions) ? c.actions : [];
+      const terminals = actions.filter(a => a && (a.type === "move" || a.type === "delete"));
+      const move = terminals.find(a => a.type === "move");
+      const kept = move || terminals[0];
+      if (kept?.type === "move") {
+        c.ending = { type: "move", folderId: kept.folderId, folderName: kept.folderName };
+      } else if (kept?.type === "delete") {
+        c.ending = { type: "delete" };
+      } else {
+        c.ending = { type: f.stopProcessing ? "stop" : "continue" };
+      }
+      if (terminals.length > 1) {
+        const others = terminals.filter(a => a !== kept).map(a => a.type === "move" ? `move to ${a.folderName || a.folderId}` : "delete");
+        const keptLabel = kept.type === "move" ? `move to ${kept.folderName || kept.folderId}` : "delete";
+        warn(`Had several endings; kept "${keptLabel}" and dropped ${others.map(o => `"${o}"`).join(", ")}.`);
+      }
+      c.actions = actions.filter(a => a && a.type !== "move" && a.type !== "delete");
+      delete c.stopProcessing;
+    }
+
+    if (validate) {
+      const sources = copy.sourceFolderIds || [];
+      const absent = sources.filter(id => !env.folderIds.has(id)).length;
+      if (absent > 0) warn(`${absent} source folder${absent === 1 ? "" : "s"} ${absent === 1 ? "does" : "do"} not exist in this profile.`);
+      if (copy.ending?.type === "move" && !env.folderIds.has(copy.ending.folderId)) {
+        warn(`Move target "${copy.ending.folderName || copy.ending.folderId}" does not exist in this profile.`);
+      }
+      if (isSet(env.tagKeys)) {
+        for (const a of copy.actions || []) {
+          if ((a?.type === "add-tag" || a?.type === "remove-tag") && !env.tagKeys.has(a.tag)) {
+            warn(`Tag "${a.tag}" does not exist in this profile.`);
+          }
+        }
+      }
+      for (const bad of regexErrors(copy.condition)) {
+        warn(`Invalid regex /${bad.value}/: ${bad.error}`);
+      }
+    }
+    return copy;
+  });
+
+  return { filters: changed ? result : filters, warnings, changed };
+}
+
+function needsAccountMigration(filters) {
+  return (filters || []).some(f => f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds));
+}
+
+/**
+ * Migrate filters loaded from storage.local. Stored data without a schemaVersion
+ * was written by 2.0.0 or later in practice (2.0.0 did not rewrite stored data),
+ * so an empty account list keeps its 2.0.0+ meaning. If accounts cannot be
+ * enumerated, account scoping is left for the next load.
+ */
+async function migrateStoredFilters(filters, storedSchema) {
+  const fromSchema = Number.isInteger(storedSchema) ? storedSchema : 2;
+  const env = {};
+  if (needsAccountMigration(filters)) {
+    try {
+      env.inboxByAccount = await fetchAccountInboxes();
+    } catch (err) {
+      console.error("Polimath Filters: account enumeration failed during migration", err);
+    }
+  }
+  const { filters: migrated, changed } = migrateFilters(filters, fromSchema, env);
+  return { filters: migrated, changed };
+}
+
+/**
+ * Persist migrated filters. The schemaVersion is stamped only once account
+ * scoping is fully migrated, so a failed account enumeration is retried.
+ */
+async function saveMigratedFilters(filters) {
+  const update = { filters };
+  if (!needsAccountMigration(filters)) update.schemaVersion = CURRENT_SCHEMA;
+  await messenger.storage.local.set(update);
+}
+
+/**
+ * What a migration needs to know about this profile, for imports and restores:
+ * every account's Inbox, every folder id and every tag key. Tags are optional.
+ */
+async function buildMigrationEnv() {
+  const accounts = await messenger.accounts.list(true);
+  const inboxByAccount = new Map();
+  const folderIds = new Set();
+  for (const account of accounts) {
+    const flat = collectFoldersFlat(account.folders);
+    for (const folder of flat) folderIds.add(folder.id);
+    const inbox = flat.find(f => f.type === "inbox");
+    if (inbox) inboxByAccount.set(account.id, inbox.id);
+  }
+  let tagKeys = null;
+  try {
+    tagKeys = new Set((await messenger.messages.tags.list()).map(t => t.key));
+  } catch (err) {
+    console.error("Polimath Filters: tag enumeration failed", err);
+  }
+  return { inboxByAccount, folderIds, tagKeys };
+}
+
+/** Legacy entry point, kept for callers and tests: account scoping only, 2.0.0+ meaning. */
+async function migrateFiltersToSourceFolders(filters) {
+  if (!needsAccountMigration(filters)) return filters;
   let inboxByAccount;
   try {
     inboxByAccount = await fetchAccountInboxes();
@@ -441,51 +616,17 @@ async function migrateFiltersToSourceFolders(filters) {
     console.error("Polimath Filters: account enumeration failed during migration", err);
     return filters;
   }
-
   return filters.map(f => {
-    if (f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds)) {
-      const sourceFolderIds = f.accountIds.map(id => inboxByAccount.get(id)).filter(Boolean);
-      const copy = { ...f, sourceFolderIds };
-      delete copy.accountIds;
-      return copy;
-    }
-    return f;
+    if (!(f && Array.isArray(f.accountIds) && !Array.isArray(f.sourceFolderIds))) return f;
+    const copy = { ...f, sourceFolderIds: f.accountIds.map(id => inboxByAccount.get(id)).filter(Boolean) };
+    delete copy.accountIds;
+    return copy;
   });
 }
 
-/**
- * Migrate the legacy terminal model — `move`/`delete` actions and the
- * `stopProcessing` flag — to a single mutually-exclusive `ending` field:
- * `{ type: "continue" }`, `{ type: "stop" }`, `{ type: "move", folderId,
- * folderName }`, or `{ type: "delete" }`. Idempotent: filters that already have
- * an `ending` are left untouched. A legacy `stopProcessing` flag without a
- * move/delete maps to a `stop` ending.
- */
+/** Legacy entry point, kept for callers and tests: the ending step only. */
 function migrateFiltersToEnding(filters) {
-  let changed = false;
-  const result = (filters || []).map(f => {
-    if (!f || (f.ending && (f.ending.type === "continue" || f.ending.type === "stop" || f.ending.type === "move" || f.ending.type === "delete"))) {
-      return f;
-    }
-    const copy = { ...f };
-    delete copy.stopProcessing;
-    const actions = Array.isArray(copy.actions) ? copy.actions : [];
-    const moveAction = actions.find(a => a && a.type === "move");
-    const deleteAction = actions.find(a => a && a.type === "delete");
-    if (moveAction) {
-      copy.ending = { type: "move", folderId: moveAction.folderId, folderName: moveAction.folderName };
-    } else if (deleteAction) {
-      copy.ending = { type: "delete" };
-    } else if (f.stopProcessing) {
-      copy.ending = { type: "stop" };
-    } else {
-      copy.ending = { type: "continue" };
-    }
-    copy.actions = actions.filter(a => a && a.type !== "move" && a.type !== "delete");
-    changed = true;
-    return copy;
-  });
-  return changed ? result : filters;
+  return migrateFilters(filters, CURRENT_SCHEMA - 1, {}).filters;
 }
 
 /**
